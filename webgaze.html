@@ -2,41 +2,40 @@
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Gaze Logger - WebGazer Edition</title>
+  <title>Gaze Logger - WebGazer Refined</title>
+  <link rel="icon" href="data:;base64,iVBORw0KGgo=">
   <script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
 
   <style>
     body { margin: 0; background: black; color: white; font-family: system-ui; overflow: hidden; }
     #layout { display: flex; width: 100vw; height: 100vh; }
-    #videoPane { flex: 1; position: relative; }
-    #player { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+    #videoPane { flex: 1; position: relative; background: #000; }
+    #player { position: absolute; inset: 0; width: 100%; height: 100%; }
     
-    /* Overlay Styles */
     #overlay { 
       position: absolute; inset: 0; display: flex; align-items: center; 
       justify-content: center; background: rgba(0,0,0,0.9); z-index: 2000; text-align: center; 
     }
     
-    /* Calibration Styles */
     .calibration-point {
-      position: absolute; width: 20px; height: 20px; background: #ff3355;
-      border-radius: 50%; cursor: pointer; border: 2px solid white;
+      position: absolute; width: 25px; height: 25px; background: #ff3355;
+      border-radius: 50%; cursor: pointer; border: 3px solid white;
       display: none; z-index: 3000; transform: translate(-50%, -50%);
+      transition: transform 0.1s;
     }
+    .calibration-point:active { transform: translate(-50%, -50%) scale(1.5); }
 
     #debug {
-      position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.6);
-      padding: 8px; font-size: 12px; border-radius: 8px; z-index: 900; pointer-events: none;
+      position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7);
+      padding: 10px; font-size: 12px; border-radius: 8px; z-index: 900; 
+      pointer-events: none; line-height: 1.4;
     }
 
     #stopBtn {
       position: absolute; top: 20px; right: 20px; background: #ff3355; color: white;
-      padding: 10px 18px; border: none; border-radius: 6px; display: none; z-index: 1000;
+      padding: 12px 20px; border: none; border-radius: 6px; display: none; 
+      z-index: 2500; font-weight: bold; cursor: pointer;
     }
-
-    /* Adjust WebGazer's built-in video preview position */
-    #webgazerVideoFeed { top: 10px !important; left: auto !important; right: 10px !important; }
-    #webgazerFaceOverlay { top: 10px !important; left: auto !important; right: 10px !important; }
   </style>
 </head>
 
@@ -47,14 +46,14 @@
       
       <div id="overlay">
         <div id="setupContent">
-          <h2>Gaze Calibration</h2>
-          <p>We need to calibrate the tracker first.<br>Click the <b>9 red dots</b> that will appear on the screen.</p>
-          <button id="initBtn" style="padding:10px 20px; font-size:1.2em;">Begin Calibration</button>
+          <h2>WebGazer Comparison Tool</h2>
+          <p>1. Allow camera access.<br>2. Click <b>"Begin Calibration"</b>.<br>3. Click each red dot 5 times while looking at it.</p>
+          <button id="initBtn" style="padding:12px 24px; font-size:1.1em; cursor:pointer;">Begin Calibration</button>
         </div>
       </div>
 
-      <button id="stopBtn">⏹ Stop & Save</button>
-      <div id="debug">Initializing WebGazer...</div>
+      <button id="stopBtn">⏹ Stop & Save CSV</button>
+      <div id="debug">Waiting for initialization...</div>
       
       <div class="calibration-point" id="pt1" style="top: 10%; left: 10%;"></div>
       <div class="calibration-point" id="pt2" style="top: 10%; left: 50%;"></div>
@@ -77,11 +76,12 @@
 
     let csvData = [["timestamp", "session_id", "participant_id", "video_id", "video_time", "gaze_x", "gaze_y", "on_screen"]];
     let player = null;
-    let calibrationClicks = 0;
+    let currentPoint = 1;
+    let clicksOnPoint = 0;
     let currentGaze = { x: 0, y: 0 };
     let isTracking = false;
 
-    // Initialize YouTube
+    // YouTube Setup
     const tag = document.createElement('script');
     tag.src = "https://www.youtube.com/iframe_api";
     document.head.appendChild(tag);
@@ -89,77 +89,96 @@
     window.onYouTubeIframeAPIReady = () => {
       player = new YT.Player('player', {
         videoId: YT_ID,
-        playerVars: { controls: 0, disablekb: 1, rel: 0, playsinline: 1 },
+        playerVars: { controls: 0, disablekb: 1, rel: 0, playsinline: 1, modestbranding: 1 },
         events: { onStateChange: (e) => { if(e.data === YT.PlayerState.ENDED) finishSession(); } }
       });
     };
 
-    // Initialize WebGazer
-    document.getElementById('initBtn').addEventListener('click', async () => {
-      document.getElementById('setupContent').innerHTML = "<p>Wait for the camera...</p>";
+    // WebGazer Initialization
+    document.getElementById('initBtn').onclick = async () => {
+      document.getElementById('setupContent').innerHTML = "<h3>Setting up camera...</h3><p>Please wait for the face mesh to appear.</p>";
       
-      await webgazer.setGazeListener((data, elapsedTime) => {
-        if (data) {
-          currentGaze = { x: data.x, y: data.y };
-          updateDebug();
-        }
-      }).showVideoPreview(true).showFaceOverlay(true).showPredictionPoints(true).begin();
+      try {
+        await webgazer.setGazeListener((data, elapsedTime) => {
+          if (data) {
+            currentGaze = { x: data.x, y: data.y };
+            updateDebug();
+          }
+        })
+        .params({ 
+          facemesh: { basePath: "https://cdn.jsdelivr.net/gh/brownhci/WebGazer/src/facemesh/" } 
+        })
+        .showVideoPreview(true)
+        .showFaceOverlay(true)
+        .showPredictionPoints(true)
+        .begin();
 
-      startCalibration();
-    });
+        // Wait a brief moment for camera to stabilize
+        setTimeout(startCalibration, 1000);
+      } catch (err) {
+        alert("Camera Error: " + err);
+      }
+    };
 
     function startCalibration() {
-      document.getElementById('overlay').style.background = "transparent";
-      document.getElementById('setupContent').style.display = "none";
-      showNextPoint();
+      document.getElementById('overlay').style.display = "none";
+      showPoint(1);
     }
 
-    function showNextPoint() {
-      calibrationClicks++;
-      const pt = document.getElementById(`pt${calibrationClicks}`);
+    function showPoint(id) {
+      const pt = document.getElementById(`pt${id}`);
       if (pt) {
         pt.style.display = "block";
         pt.onclick = () => {
-          pt.style.display = "none";
-          showNextPoint();
+          clicksOnPoint++;
+          // Require 5 clicks per point for better training data
+          if (clicksOnPoint >= 5) {
+            pt.style.display = "none";
+            clicksOnPoint = 0;
+            currentPoint++;
+            showPoint(currentPoint);
+          } else {
+            pt.style.background = (clicksOnPoint % 2 === 0) ? "#ff3355" : "#00ff88";
+          }
         };
       } else {
-        startVideo();
+        startRecording();
       }
     }
 
-    function startVideo() {
-      document.getElementById('overlay').style.display = "none";
+    function startRecording() {
       document.getElementById('stopBtn').style.display = "block";
       player.playVideo();
       isTracking = true;
       
-      // Sample every 1s (matching your MediaPipe version)
       setInterval(() => {
         if (isTracking && player.getPlayerState() === 1) {
-          logGaze();
+          const vTime = player.getCurrentTime();
+          const onScreen = (currentGaze.x >= 0 && currentGaze.x <= window.innerWidth && 
+                            currentGaze.y >= 0 && currentGaze.y <= window.innerHeight) ? 1 : 0;
+
+          csvData.push([
+            new Date().toISOString(), SESSION_ID, PID, VID, 
+            vTime.toFixed(3), Math.round(currentGaze.x), Math.round(currentGaze.y), onScreen
+          ]);
         }
       }, 1000);
     }
 
-    function logGaze() {
-      const vTime = player.getCurrentTime();
-      // On-screen check: Is (x,y) within the window bounds?
-      const onScreen = (currentGaze.x >= 0 && currentGaze.x <= window.innerWidth && 
-                        currentGaze.y >= 0 && currentGaze.y <= window.innerHeight) ? 1 : 0;
-
-      csvData.push([
-        new Date().toISOString(), SESSION_ID, PID, VID, 
-        vTime.toFixed(3), Math.round(currentGaze.x), Math.round(currentGaze.y), onScreen
-      ]);
-    }
-
     function updateDebug() {
       const d = document.getElementById('debug');
-      d.innerText = `PID: ${PID}\nX: ${Math.round(currentGaze.x)}, Y: ${Math.round(currentGaze.y)}\nTracking: ${isTracking ? "RUNNING" : "PAUSED"}`;
+      const vTime = (player && player.getCurrentTime) ? player.getCurrentTime().toFixed(2) : "0.00";
+      d.innerHTML = `
+        <b>PID:</b> ${PID}<br>
+        <b>Gaze X:</b> ${Math.round(currentGaze.x)}<br>
+        <b>Gaze Y:</b> ${Math.round(currentGaze.y)}<br>
+        <b>Video Time:</b> ${vTime}s<br>
+        <b>Status:</b> ${isTracking ? "RECORDING" : "CALIBRATING"}
+      `;
     }
 
     function finishSession() {
+      if (!isTracking) return;
       isTracking = false;
       webgazer.pause();
       downloadCSV();
@@ -171,8 +190,9 @@
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${PID}_${VID}_webgazer.csv`;
+      a.download = `WEBGAZER_${PID}_${VID}_${Date.now()}.csv`;
       a.click();
+      document.getElementById('debug').innerHTML = "<b>DONE! CSV Downloaded.</b>";
     }
 
     document.getElementById('stopBtn').onclick = finishSession;
