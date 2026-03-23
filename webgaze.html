@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Gaze Logger - WebGazer Fixed</title>
+  <title>Gaze Logger - Final WebGazer</title>
   <link rel="icon" href="data:;base64,iVBORw0KGgo=">
   <script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
 
@@ -11,29 +11,10 @@
     #layout { display: flex; width: 100vw; height: 100vh; }
     #videoPane { flex: 1; position: relative; background: #000; }
     #player { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-    
-    #overlay { 
-      position: absolute; inset: 0; display: flex; align-items: center; 
-      justify-content: center; background: rgba(0,0,0,0.9); z-index: 2000; text-align: center; 
-    }
-    
-    .calibration-point {
-      position: absolute; width: 25px; height: 25px; background: #ff3355;
-      border-radius: 50%; cursor: pointer; border: 3px solid white;
-      display: none; z-index: 3000; transform: translate(-50%, -50%);
-    }
-
-    #debug {
-      position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7);
-      padding: 10px; font-size: 12px; border-radius: 8px; z-index: 900; 
-      pointer-events: none; line-height: 1.4;
-    }
-
-    #stopBtn {
-      position: absolute; top: 20px; right: 20px; background: #ff3355; color: white;
-      padding: 12px 20px; border: none; border-radius: 6px; display: none; 
-      z-index: 2500; font-weight: bold; cursor: pointer;
-    }
+    #overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.9); z-index: 2000; text-align: center; }
+    .calibration-point { position: absolute; width: 25px; height: 25px; background: #ff3355; border-radius: 50%; cursor: pointer; border: 3px solid white; display: none; z-index: 3000; transform: translate(-50%, -50%); }
+    #debug { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 10px; font-size: 12px; border-radius: 8px; z-index: 900; pointer-events: none; }
+    #stopBtn { position: absolute; top: 20px; right: 20px; background: #ff3355; color: white; padding: 12px 20px; border: none; border-radius: 6px; display: none; z-index: 2500; font-weight: bold; cursor: pointer; }
   </style>
 </head>
 
@@ -41,15 +22,13 @@
   <div id="layout">
     <div id="videoPane">
       <div id="player"></div>
-      
       <div id="overlay">
         <div id="setupContent">
           <h2>WebGazer Comparison Tool</h2>
-          <p>1. Allow camera access.<br>2. Click <b>"Begin"</b>.<br>3. Click each red dot 5 times while staring at it.</p>
+          <p>Allow camera access, then click Begin.<br>Click each red dot 5 times.</p>
           <button id="initBtn" style="padding:12px 24px; font-size:1.1em; cursor:pointer;">Begin Calibration</button>
         </div>
       </div>
-
       <button id="stopBtn">⏹ Stop & Save CSV</button>
       <div id="debug">Waiting for user...</div>
       
@@ -79,11 +58,10 @@
     let currentGaze = { x: 0, y: 0 };
     let isTracking = false;
 
-    // YouTube Setup
+    // YouTube API
     const tag = document.createElement('script');
     tag.src = "https://www.youtube.com/iframe_api";
     document.head.appendChild(tag);
-
     window.onYouTubeIframeAPIReady = () => {
       player = new YT.Player('player', {
         videoId: YT_ID,
@@ -92,29 +70,35 @@
       });
     };
 
-    document.getElementById('initBtn').onclick = async () => {
-      document.getElementById('setupContent').innerHTML = "<h3>Initializing...</h3>";
-      
-      try {
-        // Direct property assignment to avoid ".params is not a function" error
-        webgazer.config.facemesh.basePath = "https://cdn.jsdelivr.net/gh/brownhci/WebGazer/src/facemesh/";
-        
-        await webgazer.setGazeListener((data, elapsedTime) => {
-          if (data) {
-            currentGaze = { x: data.x, y: data.y };
-            updateDebug();
-          }
-        })
-        .showVideoPreview(true)
-        .showFaceOverlay(true)
-        .showPredictionPoints(true)
-        .begin();
+    document.getElementById('initBtn').onclick = async function() {
+      this.disabled = true;
+      document.getElementById('setupContent').innerHTML = "<h3>Initializing Tracker...</h3>";
 
+      // IMPORTANT: If the script fails to find the worker files, 
+      // we force the global variable before calling begin.
+      window.WG_BASE_PATH = "https://cdn.jsdelivr.net/gh/brownhci/WebGazer/src/facemesh/";
+
+      webgazer.setGazeListener((data, elapsedTime) => {
+        if (data) {
+          currentGaze = { x: data.x, y: data.y };
+          updateDebug();
+        }
+      })
+      .showVideoPreview(true)
+      .showFaceOverlay(true)
+      .showPredictionPoints(true)
+      .begin()
+      .then(() => {
+        // Success callback: Check if config exists and update it if possible
+        if (webgazer.params && webgazer.params.facemesh) {
+           webgazer.params.facemesh.basePath = window.WG_BASE_PATH;
+        }
         startCalibration();
-      } catch (err) {
-        console.error(err);
-        alert("Init Error: " + err.message);
-      }
+      })
+      .catch(err => {
+        console.error("WebGazer failed:", err);
+        alert("Init Error: Make sure camera is allowed.");
+      });
     };
 
     function startCalibration() {
@@ -146,18 +130,12 @@
       document.getElementById('stopBtn').style.display = "block";
       player.playVideo();
       isTracking = true;
-      
       setInterval(() => {
         if (isTracking && player.getPlayerState() === 1) {
           const vTime = player.getCurrentTime();
-          // Check if coordinates are within browser viewport
           const onScreen = (currentGaze.x >= 0 && currentGaze.x <= window.innerWidth && 
                             currentGaze.y >= 0 && currentGaze.y <= window.innerHeight) ? 1 : 0;
-
-          csvData.push([
-            new Date().toISOString(), SESSION_ID, PID, VID, 
-            vTime.toFixed(3), Math.round(currentGaze.x), Math.round(currentGaze.y), onScreen
-          ]);
+          csvData.push([new Date().toISOString(), SESSION_ID, PID, VID, vTime.toFixed(3), Math.round(currentGaze.x), Math.round(currentGaze.y), onScreen]);
         }
       }, 1000);
     }
@@ -165,22 +143,13 @@
     function updateDebug() {
       const d = document.getElementById('debug');
       const vTime = (player && player.getCurrentTime) ? player.getCurrentTime().toFixed(2) : "0.00";
-      d.innerHTML = `
-        <b>PID:</b> ${PID}<br>
-        <b>X:</b> ${Math.round(currentGaze.x)} <b>Y:</b> ${Math.round(currentGaze.y)}<br>
-        <b>Video Time:</b> ${vTime}s<br>
-        <b>On Screen:</b> ${(currentGaze.x >= 0 && currentGaze.x <= window.innerWidth) ? "YES" : "NO"}
-      `;
+      d.innerHTML = `<b>PID:</b> ${PID}<br><b>X:</b> ${Math.round(currentGaze.x)} <b>Y:</b> ${Math.round(currentGaze.y)}<br><b>On Screen:</b> ${(currentGaze.x >= 0 && currentGaze.x <= window.innerWidth) ? "YES" : "NO"}`;
     }
 
     function finishSession() {
       if (!isTracking) return;
       isTracking = false;
       webgazer.pause();
-      downloadCSV();
-    }
-
-    function downloadCSV() {
       const csvContent = csvData.map(e => e.join(",")).join("\n");
       const blob = new Blob([csvContent], { type: 'text/csv' });
       const url = window.URL.createObjectURL(blob);
