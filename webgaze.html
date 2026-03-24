@@ -2,196 +2,221 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Gaze Logger - Normalized Version</title>
+    <title>Bird Study: Fish Game Edition</title>
     <script src="https://cdn.jsdelivr.net/npm/webgazer@2.1.1/dist/webgazer.min.js"></script>
 
     <style>
-        body { margin: 0; padding: 0; background-color: #f0f2f5; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        body { margin: 0; padding: 0; background-color: #e0f7fa; font-family: 'Comic Sans MS', cursive, sans-serif; overflow: hidden; }
         
-        /* Container to keep everything centered and visible */
         #app-viewport {
             position: relative; width: 100vw; height: 100vh;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
 
-        #video-container {
-            position: relative; width: 80%; height: 70%;
-            background: #000; border: 5px solid #333; border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 10;
+        /* The main stage where video and game happen */
+        #stage {
+            position: relative; width: 80%; height: 75%;
+            background: #ffffff; border: 8px solid #4fc3f7; border-radius: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2); z-index: 10; overflow: hidden;
         }
 
-        iframe { width: 100%; height: 100%; border: none; border-radius: 8px; }
+        iframe { width: 100%; height: 100%; border: none; }
 
-        /* Overlay for Instructions & Calibration */
-        #overlay {
-            position: fixed; inset: 0; background: rgba(255,255,255,0.95);
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            z-index: 2000; text-align: center;
+        /* Webcam Feed: Bottom Left & Always on Top */
+        #webgazerVideoFeed {
+            display: block !important;
+            position: fixed !important;
+            bottom: 20px !important;
+            left: 20px !important;
+            top: auto !important; /* Override webgazer default */
+            width: 180px !important;
+            height: auto !important;
+            z-index: 10000 !important;
+            border: 4px solid #fff;
+            border-radius: 15px;
+            transform: scaleX(-1);
         }
 
-        .calib-point {
-            position: absolute; width: 30px; height: 30px; background: #ff4444;
-            border: 3px solid white; border-radius: 50%; cursor: pointer;
-            z-index: 3000; transform: translate(-50%, -50%); display: none;
+        /* Fish Game Elements */
+        .fish {
+            position: absolute; width: 60px; height: 40px; 
+            cursor: pointer; z-index: 500; transition: transform 0.2s;
+            display: flex; align-items: center; justify-content: center; font-size: 30px;
         }
 
+        #game-instr {
+            position: absolute; top: 20px; width: 100%; text-align: center;
+            font-size: 24px; color: #01579b; z-index: 600;
+        }
+
+        /* Debug Bar */
         #debug-bar {
-            position: fixed; bottom: 0; width: 100%; background: #333; color: #0f0;
-            padding: 5px 20px; font-family: monospace; font-size: 14px; z-index: 1000;
+            position: fixed; top: 0; width: 100%; background: rgba(0,0,0,0.8);
+            color: white; padding: 8px 20px; z-index: 10001; display: flex; gap: 20px;
+        }
+        .status-on { color: #00ff00; font-weight: bold; }
+        .status-off { color: #ff4444; font-weight: bold; }
+
+        #overlay {
+            position: fixed; inset: 0; background: #e1f5fe;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 2000;
         }
 
         .btn {
-            padding: 15px 40px; font-size: 1.2rem; cursor: pointer;
-            background: #007bff; color: white; border: none; border-radius: 50px;
-            transition: 0.3s;
-        }
-        .btn:hover { background: #0056b3; }
-        
-        #stopBtn {
-            position: fixed; top: 20px; right: 20px; z-index: 1500;
-            background: #dc3545; display: none;
+            padding: 20px 50px; font-size: 1.5rem; cursor: pointer;
+            background: #ff7043; color: white; border: none; border-radius: 50px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
         }
     </style>
 </head>
 
 <body>
 
-<div id="debug-bar">Gaze: Initializing...</div>
-<button id="stopBtn" class="btn" onclick="finishSession()">Stop & Save CSV</button>
+<div id="debug-bar">
+    <span>PID: <span id="disp-pid"></span></span>
+    <span>Gaze: <span id="disp-gaze">--</span></span>
+    <span>Screen: <span id="disp-screen">--</span></span>
+</div>
 
 <div id="app-viewport">
-    <div id="video-container">
-        <div id="player"></div> </div>
-
-    <div id="overlay">
-        <div id="setup-ui">
-            <h1>Eye Tracking Setup</h1>
-            <p>1. Allow Camera Access.<br>2. Wait for the camera preview.<br>3. Click "Start" then click each red dot 5 times.</p>
-            <button class="btn" onclick="initTracker()">Start Calibration</button>
+    <div id="stage">
+        <div id="game-area" style="display:none; width:100%; height:100%; background:#81d4fa; position:relative;">
+            <div id="game-instr">Catch the <b>RED FISH</b> 5 times! 🐟</div>
+        </div>
+        
+        <div id="video-area" style="display:none; width:100%; height:100%;">
+            <div id="player"></div>
         </div>
     </div>
 
-    <div class="calib-point" id="pt1" style="top:10%; left:10%"></div>
-    <div class="calib-point" id="pt2" style="top:10%; left:90%"></div>
-    <div class="calib-point" id="pt3" style="top:50%; left:50%"></div>
-    <div class="calib-point" id="pt4" style="top:90%; left:10%"></div>
-    <div class="calib-point" id="pt5" style="top:90%; left:90%"></div>
+    <div id="overlay">
+        <h1>Welcome to the Bird Discovery!</h1>
+        <p>Parents: Please ensure the child's face is visible in the bottom-left camera.</p>
+        <button class="btn" onclick="initExperience()">Start Game!</button>
+    </div>
 </div>
 
 <script>
-    // Configuration from URL
     const params = new URLSearchParams(window.location.search);
-    const PID = params.get("pid") || "P_Unknown";
-    const VID_ID = params.get("yt") || "905QNpTukIU"; // Default bird video
+    const PID = params.get("pid") || "P001";
+    const YT_ID = params.get("yt") || "905QNpTukIU";
+    
+    document.getElementById('disp-pid').innerText = PID;
 
-    let csvData = [["timestamp", "video_time", "norm_x", "norm_y", "on_video"]];
+    let csvData = [["timestamp", "event", "video_time", "norm_x", "norm_y", "on_screen"]];
     let currentGaze = { x: 0, y: 0 };
-    let isTracking = false;
     let player = null;
+    let isRecording = false;
 
-    // 1. YouTube API Initialization
+    // YouTube Setup
     const tag = document.createElement('script');
     tag.src = "https://www.youtube.com/iframe_api";
     document.head.appendChild(tag);
     window.onYouTubeIframeAPIReady = () => {
         player = new YT.Player('player', {
-            videoId: VID_ID,
-            playerVars: { controls: 0, disablekb: 1, modestbranding: 1 },
-            events: { onStateChange: (e) => { if(e.data === YT.PlayerState.ENDED) finishSession(); } }
+            videoId: YT_ID,
+            playerVars: { controls: 0, disablekb: 1, modestbranding: 1, rel: 0 }
         });
     };
 
-    // 2. Start WebGazer
-    async function initTracker() {
-        document.getElementById('setup-ui').innerHTML = "<h2>Waking up camera...</h2>";
+    async function initExperience() {
+        document.getElementById('overlay').style.display = 'none';
         
-        try {
-            await webgazer.setRegression('ridge')
-                .setGazeListener((data) => {
-                    if (!data) return;
-                    currentGaze = { x: data.x, y: data.y };
-                    updateDebug();
-                }).begin();
+        await webgazer.setRegression('ridge')
+            .setGazeListener((data) => {
+                if (!data) return;
+                currentGaze = { x: data.x, y: data.y };
+                updateSystem();
+            }).begin();
 
-            webgazer.showVideo(true).showPredictionPoints(true);
-            
-            // Adjust camera preview size
-            const checkCam = setInterval(() => {
-                const vid = document.getElementById('webgazerVideoFeed');
-                if (vid) {
-                    vid.style.width = '160px'; vid.style.height = 'auto';
-                    clearInterval(checkCam);
-                    document.getElementById('overlay').style.display = 'none';
-                    runCalibration();
-                }
-            }, 500);
-
-        } catch (err) {
-            alert("Camera error. Please refresh and check permissions.");
-        }
+        webgazer.showVideo(true).showPredictionPoints(true);
+        startFishGame();
     }
 
-    // 3. Calibration Logic (5 clicks per point)
-    let activePt = 1;
-    let clicks = 0;
-    function runCalibration() {
-        const pt = document.getElementById(`pt${activePt}`);
-        if (pt) {
-            pt.style.display = 'block';
-            pt.onclick = () => {
-                clicks++;
-                if (clicks >= 5) {
-                    pt.style.display = 'none';
-                    clicks = 0; activePt++;
-                    runCalibration();
+    // --- CALIBRATION GAME ---
+    let fishCaught = 0;
+    function startFishGame() {
+        document.getElementById('game-area').style.display = 'block';
+        spawnFish();
+    }
+
+    function spawnFish() {
+        const area = document.getElementById('game-area');
+        area.querySelectorAll('.fish').forEach(f => f.remove());
+
+        // Spawn 4 distraction "Blue Fish"
+        for(let i=0; i<4; i++) createFish(false);
+        // Spawn 1 target "Red Fish"
+        createFish(true);
+    }
+
+    function createFish(isTarget) {
+        const f = document.createElement('div');
+        f.className = 'fish';
+        f.innerHTML = isTarget ? '🍎' : '💧'; // Using emojis for simplicity, could be fish icons
+        if(isTarget) f.style.filter = "hue-rotate(0deg)";
+        
+        f.style.left = (Math.random() * 80 + 10) + "%";
+        f.style.top = (Math.random() * 70 + 15) + "%";
+
+        f.onclick = () => {
+            if(isTarget) {
+                fishCaught++;
+                if(fishCaught >= 5) {
+                    document.getElementById('game-area').style.display = 'none';
+                    startVideo();
                 } else {
-                    pt.style.background = (clicks % 2 === 0) ? "#ff4444" : "#00ff88";
+                    spawnFish();
                 }
-            };
-        } else {
-            startExperiment();
-        }
+            }
+        };
+        document.getElementById('game-area').appendChild(f);
     }
 
-    // 4. Data Collection
-    function startExperiment() {
-        document.getElementById('stopBtn').style.display = 'block';
+    // --- EXPERIMENT PHASE ---
+    function startVideo() {
+        document.getElementById('video-area').style.display = 'block';
         player.playVideo();
-        isTracking = true;
+        isRecording = true;
 
         setInterval(() => {
-            if (isTracking && player.getPlayerState() === 1) {
-                const videoBox = document.getElementById('video-container').getBoundingClientRect();
-                const vTime = player.getCurrentTime().toFixed(3);
+            if (isRecording) {
+                const stageBox = document.getElementById('stage').getBoundingClientRect();
+                const vTime = player.getCurrentTime ? player.getCurrentTime().toFixed(2) : 0;
 
-                // Calculate Normalized Coordinates (0.0 to 1.0) relative to the video box
-                const normX = (currentGaze.x - videoBox.left) / videoBox.width;
-                const normY = (currentGaze.y - videoBox.top) / videoBox.height;
-                
-                const onVideo = (normX >= 0 && normX <= 1 && normY >= 0 && normY <= 1) ? 1 : 0;
+                const normX = (currentGaze.x - stageBox.left) / stageBox.width;
+                const normY = (currentGaze.y - stageBox.top) / stageBox.height;
+                const onScreen = (currentGaze.x >= 0 && currentGaze.x <= window.innerWidth && 
+                                  currentGaze.y >= 0 && currentGaze.y <= window.innerHeight) ? 1 : 0;
 
-                csvData.push([new Date().toISOString(), vTime, normX.toFixed(4), normY.toFixed(4), onVideo]);
+                csvData.push([new Date().toISOString(), "video", vTime, normX.toFixed(4), normY.toFixed(4), onScreen]);
             }
-        }, 1000); // Logs every second
+        }, 1000);
     }
 
-    function updateDebug() {
-        document.getElementById('debug-bar').innerText = `PID: ${PID} | Gaze X: ${Math.round(currentGaze.x)} Y: ${Math.round(currentGaze.y)}`;
+    function updateSystem() {
+        // Update Debug Text
+        document.getElementById('disp-gaze').innerText = `${Math.round(currentGaze.x)}, ${Math.round(currentGaze.y)}`;
+        
+        const onScreen = (currentGaze.x >= 0 && currentGaze.x <= window.innerWidth && 
+                          currentGaze.y >= 0 && currentGaze.y <= window.innerHeight);
+        
+        const screenSpan = document.getElementById('disp-screen');
+        screenSpan.innerText = onScreen ? "ON SCREEN" : "OFF SCREEN";
+        screenSpan.className = onScreen ? "status-on" : "status-off";
     }
 
     function finishSession() {
-        isTracking = false;
+        isRecording = false;
         webgazer.pause();
-        
         const csvContent = csvData.map(e => e.join(",")).join("\n");
         const blob = new Blob([csvContent], { type: 'text/csv' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `GAZE_${PID}_${Date.now()}.csv`;
+        a.download = `BIRDS_${PID}.csv`;
         a.click();
-        
-        alert("Data saved! You can now close this tab.");
     }
 </script>
 
