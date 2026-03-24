@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Bird Study: 9-Dot Fish Game</title>
+    <title>Bird Study: 9-Dot Fishing Game</title>
     <script src="https://cdn.jsdelivr.net/npm/webgazer@2.1.1/dist/webgazer.min.js"></script>
 
     <style>
@@ -13,13 +13,14 @@
             display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
 
+        /* Main Container for Game and Video */
         #stage {
             position: relative; width: 85%; height: 80%;
             background: #ffffff; border: 8px solid #4fc3f7; border-radius: 25px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2); z-index: 10; overflow: hidden;
         }
 
-        /* WEBCAM: Elevated to the absolute top of the stack */
+        /* WEBCAM: Forced to bottom-left and always on top */
         #webgazerVideoFeed {
             display: block !important;
             position: fixed !important;
@@ -28,30 +29,40 @@
             top: auto !important;
             width: 200px !important;
             height: auto !important;
-            z-index: 2147483647 !important; /* Maximum possible Z-index */
+            z-index: 2147483647 !important;
             border: 4px solid #fff;
             border-radius: 15px;
             transform: scaleX(-1);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         }
 
-        /* Target Point Styling */
+        /* Target Point: Transparent background, just the emoji */
         .fish-target {
-            position: absolute; width: 60px; height: 60px; 
+            position: absolute; width: 80px; height: 80px; 
             cursor: pointer; z-index: 1000; transform: translate(-50%, -50%);
-            display: flex; align-items: center; justify-content: center; font-size: 40px;
-            transition: transform 0.1s;
+            display: flex; align-items: center; justify-content: center; 
+            font-size: 50px; background: none; border: none;
+            transition: transform 0.1s ease;
+            user-select: none;
         }
+
+        /* Distractor: Transparent background */
         .fish-distractor {
-            position: absolute; width: 50px; height: 50px; 
+            position: absolute; width: 60px; height: 60px; 
             z-index: 999; transform: translate(-50%, -50%);
-            display: flex; align-items: center; justify-content: center; font-size: 30px;
-            opacity: 0.6; pointer-events: none;
+            display: flex; align-items: center; justify-content: center; 
+            font-size: 35px; background: none; border: none;
+            opacity: 0.5; pointer-events: none;
+            user-select: none;
+        }
+
+        /* Full-Area Video Logic */
+        #video-area, #player {
+            width: 100%; height: 100%;
         }
 
         #game-instr {
             position: absolute; top: 15px; width: 100%; text-align: center;
-            font-size: 22px; color: #01579b; z-index: 1100;
+            font-size: 24px; color: #01579b; z-index: 1100; text-shadow: 1px 1px white;
         }
 
         #debug-bar {
@@ -74,24 +85,24 @@
 <div id="debug-bar">
     <span>PID: <span id="disp-pid"></span></span>
     <span>Screen: <span id="disp-screen">--</span></span>
-    <button onclick="finishSession()" style="margin-left:auto; cursor:pointer;">Stop & Save</button>
+    <button onclick="finishSession()" style="margin-left:auto; cursor:pointer;">Stop & Save CSV</button>
 </div>
 
 <div id="app-viewport">
     <div id="stage">
         <div id="game-area" style="display:none; width:100%; height:100%; background:#b3e5fc; position:relative;">
-            <div id="game-instr">Click the <b>RED APPLE 🍎</b> 3 times at every spot!</div>
+            <div id="game-instr">Help the <b>FISH 🐟</b> swim! Click it 3 times at every spot.</div>
         </div>
         
-        <div id="video-area" style="display:none; width:100%; height:100%;">
+        <div id="video-area" style="display:none;">
             <div id="player"></div>
         </div>
     </div>
 
     <div id="overlay">
-        <h1>🐦 Ready to find the birds?</h1>
-        <p>Click the button to start the game!</p>
-        <button onclick="initExperience()" style="padding:20px 60px; font-size:1.5rem; cursor:pointer; background:#ff7043; color:white; border:none; border-radius:50px;">Start!</button>
+        <h1>🐟 Ready for Fishing?</h1>
+        <p>Parents: Ensure the child's face is visible in the corner camera.</p>
+        <button onclick="initExperience()" style="padding:20px 60px; font-size:1.5rem; cursor:pointer; background:#ff7043; color:white; border:none; border-radius:50px; font-weight:bold;">LET'S GO!</button>
     </div>
 </div>
 
@@ -121,7 +132,16 @@
     window.onYouTubeIframeAPIReady = () => {
         player = new YT.Player('player', {
             videoId: YT_ID,
-            playerVars: { controls: 0, disablekb: 1, modestbranding: 1, rel: 0 }
+            width: '100%',
+            height: '100%',
+            playerVars: { 
+                controls: 0, 
+                disablekb: 1, 
+                modestbranding: 1, 
+                rel: 0,
+                showinfo: 0,
+                iv_load_policy: 3
+            }
         });
     };
 
@@ -156,20 +176,20 @@
 
         const [x, y] = points[currentPointIndex];
 
-        // 1. Create Distractors (Blue drops) around the target
+        // Create Distractors (Waves/Water)
         for (let i = 0; i < 6; i++) {
             const d = document.createElement('div');
             d.className = 'fish-distractor';
-            d.innerHTML = '💧';
-            d.style.left = (x + (Math.random() * 20 - 10)) + "%";
-            d.style.top = (y + (Math.random() * 20 - 10)) + "%";
+            d.innerHTML = '🌊';
+            d.style.left = (x + (Math.random() * 24 - 12)) + "%";
+            d.style.top = (y + (Math.random() * 24 - 12)) + "%";
             area.appendChild(d);
         }
 
-        // 2. Create Target (Red Apple)
+        // Create Target (Fish)
         const t = document.createElement('div');
         t.className = 'fish-target';
-        t.innerHTML = '🍎';
+        t.innerHTML = '🐟';
         t.style.left = x + "%";
         t.style.top = y + "%";
         
@@ -180,7 +200,8 @@
                 currentPointIndex++;
                 spawnPoint();
             } else {
-                t.style.transform = `translate(-50%, -50%) scale(${1 + clickCount * 0.3})`;
+                // Animate the fish as it is clicked
+                t.style.transform = `translate(-50%, -50%) scale(${1 + clickCount * 0.4}) rotate(${clickCount * 15}deg)`;
             }
         };
         area.appendChild(t);
@@ -196,6 +217,7 @@
                 const stageBox = document.getElementById('stage').getBoundingClientRect();
                 const vTime = player.getCurrentTime ? player.getCurrentTime().toFixed(2) : 0;
 
+                // Normalized relative to the actual video area
                 const normX = (currentGaze.x - stageBox.left) / stageBox.width;
                 const normY = (currentGaze.y - stageBox.top) / stageBox.height;
                 const onScreen = (currentGaze.x >= 0 && currentGaze.x <= window.innerWidth && 
@@ -221,7 +243,7 @@
         const blob = new Blob([csvContent], { type: 'text/csv' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = `STUDY_${PID}.csv`; a.click();
+        a.href = url; a.download = `FISH_STUDY_${PID}.csv`; a.click();
     }
 </script>
 
