@@ -2,151 +2,198 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Gaze Logger - Compatibility Mode</title>
-    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
+    <title>Gaze Logger - Normalized Version</title>
+    <script src="https://cdn.jsdelivr.net/npm/webgazer@2.1.1/dist/webgazer.min.js"></script>
 
     <style>
-        body { margin: 0; background: black; color: white; font-family: system-ui; overflow: hidden; }
-        #videoPane { position: relative; width: 100vw; height: 100vh; }
-        #player { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-        #overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.9); z-index: 2000; text-align: center; }
-        .calibration-point { position: absolute; width: 25px; height: 25px; background: #ff3355; border-radius: 50%; cursor: pointer; border: 3px solid white; display: none; z-index: 3000; transform: translate(-50%, -50%); }
-        #debug { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 10px; font-size: 12px; border-radius: 8px; z-index: 900; pointer-events: none; }
-        #stopBtn { position: absolute; top: 20px; right: 20px; background: #ff3355; color: white; padding: 12px 20px; border: none; border-radius: 6px; display: none; z-index: 2500; font-weight: bold; cursor: pointer; }
+        body { margin: 0; padding: 0; background-color: #f0f2f5; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        
+        /* Container to keep everything centered and visible */
+        #app-viewport {
+            position: relative; width: 100vw; height: 100vh;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+
+        #video-container {
+            position: relative; width: 80%; height: 70%;
+            background: #000; border: 5px solid #333; border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 10;
+        }
+
+        iframe { width: 100%; height: 100%; border: none; border-radius: 8px; }
+
+        /* Overlay for Instructions & Calibration */
+        #overlay {
+            position: fixed; inset: 0; background: rgba(255,255,255,0.95);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 2000; text-align: center;
+        }
+
+        .calib-point {
+            position: absolute; width: 30px; height: 30px; background: #ff4444;
+            border: 3px solid white; border-radius: 50%; cursor: pointer;
+            z-index: 3000; transform: translate(-50%, -50%); display: none;
+        }
+
+        #debug-bar {
+            position: fixed; bottom: 0; width: 100%; background: #333; color: #0f0;
+            padding: 5px 20px; font-family: monospace; font-size: 14px; z-index: 1000;
+        }
+
+        .btn {
+            padding: 15px 40px; font-size: 1.2rem; cursor: pointer;
+            background: #007bff; color: white; border: none; border-radius: 50px;
+            transition: 0.3s;
+        }
+        .btn:hover { background: #0056b3; }
+        
+        #stopBtn {
+            position: fixed; top: 20px; right: 20px; z-index: 1500;
+            background: #dc3545; display: none;
+        }
     </style>
 </head>
 
 <body>
-    <div id="videoPane">
-        <div id="player"></div>
-        <div id="overlay">
-            <div id="setupContent">
-                <h2>Gaze Tracker (Safe Mode)</h2>
-                <p>1. Allow Camera Access.<br>2. Wait for the green box on your face.<br>3. Click 5 times on each red dot.</p>
-                <button id="initBtn" style="padding: 15px 30px; font-size: 1.2rem; cursor: pointer; background: #28a745; color: white; border: none; border-radius: 5px;">Start Tracker</button>
-            </div>
+
+<div id="debug-bar">Gaze: Initializing...</div>
+<button id="stopBtn" class="btn" onclick="finishSession()">Stop & Save CSV</button>
+
+<div id="app-viewport">
+    <div id="video-container">
+        <div id="player"></div> </div>
+
+    <div id="overlay">
+        <div id="setup-ui">
+            <h1>Eye Tracking Setup</h1>
+            <p>1. Allow Camera Access.<br>2. Wait for the camera preview.<br>3. Click "Start" then click each red dot 5 times.</p>
+            <button class="btn" onclick="initTracker()">Start Calibration</button>
         </div>
-        <button id="stopBtn">⏹ Stop & Save CSV</button>
-        <div id="debug">System Ready</div>
-        
-        <div class="calibration-point" id="pt1" style="top: 15%; left: 15%;"></div>
-        <div class="calibration-point" id="pt2" style="top: 15%; left: 50%;"></div>
-        <div class="calibration-point" id="pt3" style="top: 15%; left: 85%;"></div>
-        <div class="calibration-point" id="pt4" style="top: 50%; left: 15%;"></div>
-        <div class="calibration-point" id="pt5" style="top: 50%; left: 50%;"></div>
-        <div class="calibration-point" id="pt6" style="top: 50%; left: 85%;"></div>
-        <div class="calibration-point" id="pt7" style="top: 85%; left: 15%;"></div>
-        <div class="calibration-point" id="pt8" style="top: 85%; left: 50%;"></div>
-        <div class="calibration-point" id="pt9" style="top: 85%; left: 85%;"></div>
     </div>
 
-    <script>
-        const params = new URLSearchParams(location.search);
-        const PID = params.get("pid") || "P001";
-        const VID = params.get("vid") || "V01";
-        const YT_ID = params.get("yt") || "";
+    <div class="calib-point" id="pt1" style="top:10%; left:10%"></div>
+    <div class="calib-point" id="pt2" style="top:10%; left:90%"></div>
+    <div class="calib-point" id="pt3" style="top:50%; left:50%"></div>
+    <div class="calib-point" id="pt4" style="top:90%; left:10%"></div>
+    <div class="calib-point" id="pt5" style="top:90%; left:90%"></div>
+</div>
+
+<script>
+    // Configuration from URL
+    const params = new URLSearchParams(window.location.search);
+    const PID = params.get("pid") || "P_Unknown";
+    const VID_ID = params.get("yt") || "905QNpTukIU"; // Default bird video
+
+    let csvData = [["timestamp", "video_time", "norm_x", "norm_y", "on_video"]];
+    let currentGaze = { x: 0, y: 0 };
+    let isTracking = false;
+    let player = null;
+
+    // 1. YouTube API Initialization
+    const tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+    window.onYouTubeIframeAPIReady = () => {
+        player = new YT.Player('player', {
+            videoId: VID_ID,
+            playerVars: { controls: 0, disablekb: 1, modestbranding: 1 },
+            events: { onStateChange: (e) => { if(e.data === YT.PlayerState.ENDED) finishSession(); } }
+        });
+    };
+
+    // 2. Start WebGazer
+    async function initTracker() {
+        document.getElementById('setup-ui').innerHTML = "<h2>Waking up camera...</h2>";
         
-        let csvData = [["timestamp", "video_time", "gaze_x", "gaze_y", "on_screen"]];
-        let currentGaze = { x: 0, y: 0 };
-        let isTracking = false;
-        let player = null;
-
-        // YouTube
-        const tag = document.createElement('script');
-        tag.src = "https://www.youtube.com/iframe_api";
-        document.head.appendChild(tag);
-        window.onYouTubeIframeAPIReady = () => {
-            player = new YT.Player('player', {
-                videoId: YT_ID,
-                playerVars: { controls: 0, disablekb: 1, rel: 0, playsinline: 1 }
-            });
-        };
-
-        document.getElementById('initBtn').onclick = async function() {
-            this.style.display = 'none';
-            document.getElementById('debug').innerText = "Waking up camera...";
-
-            // SWITCH TRACKER TO CLMTRACKR (More stable for GH Pages)
-            webgazer.setTracker("clmtrackr");
-            webgazer.setRegression("ridge");
-
-            await webgazer.setGazeListener((data, elapsedTime) => {
-                if (data) {
+        try {
+            await webgazer.setRegression('ridge')
+                .setGazeListener((data) => {
+                    if (!data) return;
                     currentGaze = { x: data.x, y: data.y };
                     updateDebug();
-                }
-            })
-            .showVideoPreview(true)
-            .showFaceOverlay(true)
-            .begin();
+                }).begin();
 
-            // Wait for tracker to find face
-            const checkReady = setInterval(() => {
-                if (webgazer.isReady()) {
-                    clearInterval(checkReady);
+            webgazer.showVideo(true).showPredictionPoints(true);
+            
+            // Adjust camera preview size
+            const checkCam = setInterval(() => {
+                const vid = document.getElementById('webgazerVideoFeed');
+                if (vid) {
+                    vid.style.width = '160px'; vid.style.height = 'auto';
+                    clearInterval(checkCam);
                     document.getElementById('overlay').style.display = 'none';
-                    startCalibration();
+                    runCalibration();
                 }
             }, 500);
-        };
 
-        // Calibration
-        let currentPt = 1;
-        let clicks = 0;
-        function startCalibration() { nextPoint(); }
-
-        function nextPoint() {
-            const pt = document.getElementById(`pt${currentPt}`);
-            if (pt) {
-                pt.style.display = "block";
-                pt.onclick = () => {
-                    clicks++;
-                    if (clicks >= 5) {
-                        pt.style.display = "none";
-                        clicks = 0;
-                        currentPt++;
-                        nextPoint();
-                    } else {
-                        pt.style.background = (clicks % 2 === 0) ? "#ff3355" : "#00ff88";
-                    }
-                };
-            } else {
-                startRecording();
-            }
+        } catch (err) {
+            alert("Camera error. Please refresh and check permissions.");
         }
+    }
 
-        function startRecording() {
-            document.getElementById('stopBtn').style.display = "block";
-            player.playVideo();
-            isTracking = true;
-            setInterval(() => {
-                if (isTracking && player.getPlayerState() === 1) {
-                    const onScreen = (currentGaze.x >= 0 && currentGaze.x <= window.innerWidth && currentGaze.y >= 0 && currentGaze.y <= window.innerHeight) ? 1 : 0;
-                    csvData.push([new Date().toISOString(), player.getCurrentTime().toFixed(3), Math.round(currentGaze.x), Math.round(currentGaze.y), onScreen]);
+    // 3. Calibration Logic (5 clicks per point)
+    let activePt = 1;
+    let clicks = 0;
+    function runCalibration() {
+        const pt = document.getElementById(`pt${activePt}`);
+        if (pt) {
+            pt.style.display = 'block';
+            pt.onclick = () => {
+                clicks++;
+                if (clicks >= 5) {
+                    pt.style.display = 'none';
+                    clicks = 0; activePt++;
+                    runCalibration();
+                } else {
+                    pt.style.background = (clicks % 2 === 0) ? "#ff4444" : "#00ff88";
                 }
-            }, 1000);
+            };
+        } else {
+            startExperiment();
         }
+    }
 
-        function updateDebug() {
-            document.getElementById('debug').innerHTML = `X: ${Math.round(currentGaze.x)} | Y: ${Math.round(currentGaze.y)}`;
-        }
+    // 4. Data Collection
+    function startExperiment() {
+        document.getElementById('stopBtn').style.display = 'block';
+        player.playVideo();
+        isTracking = true;
 
-        function downloadCSV() {
-            const csvContent = csvData.map(e => e.join(",")).join("\n");
-            const blob = new Blob([csvContent], { type: 'text/csv' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `SAFE_WG_${PID}_${VID}.csv`;
-            a.click();
-        }
+        setInterval(() => {
+            if (isTracking && player.getPlayerState() === 1) {
+                const videoBox = document.getElementById('video-container').getBoundingClientRect();
+                const vTime = player.getCurrentTime().toFixed(3);
 
-        document.getElementById('stopBtn').onclick = () => {
-            isTracking = false;
-            webgazer.pause();
-            downloadCSV();
-        };
-    </script>
+                // Calculate Normalized Coordinates (0.0 to 1.0) relative to the video box
+                const normX = (currentGaze.x - videoBox.left) / videoBox.width;
+                const normY = (currentGaze.y - videoBox.top) / videoBox.height;
+                
+                const onVideo = (normX >= 0 && normX <= 1 && normY >= 0 && normY <= 1) ? 1 : 0;
+
+                csvData.push([new Date().toISOString(), vTime, normX.toFixed(4), normY.toFixed(4), onVideo]);
+            }
+        }, 1000); // Logs every second
+    }
+
+    function updateDebug() {
+        document.getElementById('debug-bar').innerText = `PID: ${PID} | Gaze X: ${Math.round(currentGaze.x)} Y: ${Math.round(currentGaze.y)}`;
+    }
+
+    function finishSession() {
+        isTracking = false;
+        webgazer.pause();
+        
+        const csvContent = csvData.map(e => e.join(",")).join("\n");
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `GAZE_${PID}_${Date.now()}.csv`;
+        a.click();
+        
+        alert("Data saved! You can now close this tab.");
+    }
+</script>
+
 </body>
 </html>
