@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Bird Study: Fish Game Edition</title>
+    <title>Bird Study: 9-Dot Fish Game</title>
     <script src="https://cdn.jsdelivr.net/npm/webgazer@2.1.1/dist/webgazer.min.js"></script>
 
     <style>
@@ -13,46 +13,50 @@
             display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
 
-        /* The main stage where video and game happen */
         #stage {
-            position: relative; width: 80%; height: 75%;
+            position: relative; width: 85%; height: 80%;
             background: #ffffff; border: 8px solid #4fc3f7; border-radius: 25px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2); z-index: 10; overflow: hidden;
         }
 
-        iframe { width: 100%; height: 100%; border: none; }
-
-        /* Webcam Feed: Bottom Left & Always on Top */
+        /* WEBCAM: Elevated to the absolute top of the stack */
         #webgazerVideoFeed {
             display: block !important;
             position: fixed !important;
             bottom: 20px !important;
             left: 20px !important;
-            top: auto !important; /* Override webgazer default */
-            width: 180px !important;
+            top: auto !important;
+            width: 200px !important;
             height: auto !important;
-            z-index: 10000 !important;
+            z-index: 2147483647 !important; /* Maximum possible Z-index */
             border: 4px solid #fff;
             border-radius: 15px;
             transform: scaleX(-1);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         }
 
-        /* Fish Game Elements */
-        .fish {
-            position: absolute; width: 60px; height: 40px; 
-            cursor: pointer; z-index: 500; transition: transform 0.2s;
+        /* Target Point Styling */
+        .fish-target {
+            position: absolute; width: 60px; height: 60px; 
+            cursor: pointer; z-index: 1000; transform: translate(-50%, -50%);
+            display: flex; align-items: center; justify-content: center; font-size: 40px;
+            transition: transform 0.1s;
+        }
+        .fish-distractor {
+            position: absolute; width: 50px; height: 50px; 
+            z-index: 999; transform: translate(-50%, -50%);
             display: flex; align-items: center; justify-content: center; font-size: 30px;
+            opacity: 0.6; pointer-events: none;
         }
 
         #game-instr {
-            position: absolute; top: 20px; width: 100%; text-align: center;
-            font-size: 24px; color: #01579b; z-index: 600;
+            position: absolute; top: 15px; width: 100%; text-align: center;
+            font-size: 22px; color: #01579b; z-index: 1100;
         }
 
-        /* Debug Bar */
         #debug-bar {
-            position: fixed; top: 0; width: 100%; background: rgba(0,0,0,0.8);
-            color: white; padding: 8px 20px; z-index: 10001; display: flex; gap: 20px;
+            position: fixed; top: 0; width: 100%; background: rgba(0,0,0,0.85);
+            color: white; padding: 10px 20px; z-index: 2147483646; display: flex; gap: 30px; font-family: monospace;
         }
         .status-on { color: #00ff00; font-weight: bold; }
         .status-off { color: #ff4444; font-weight: bold; }
@@ -60,13 +64,7 @@
         #overlay {
             position: fixed; inset: 0; background: #e1f5fe;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
-            z-index: 2000;
-        }
-
-        .btn {
-            padding: 20px 50px; font-size: 1.5rem; cursor: pointer;
-            background: #ff7043; color: white; border: none; border-radius: 50px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            z-index: 2147483645;
         }
     </style>
 </head>
@@ -75,14 +73,14 @@
 
 <div id="debug-bar">
     <span>PID: <span id="disp-pid"></span></span>
-    <span>Gaze: <span id="disp-gaze">--</span></span>
     <span>Screen: <span id="disp-screen">--</span></span>
+    <button onclick="finishSession()" style="margin-left:auto; cursor:pointer;">Stop & Save</button>
 </div>
 
 <div id="app-viewport">
     <div id="stage">
-        <div id="game-area" style="display:none; width:100%; height:100%; background:#81d4fa; position:relative;">
-            <div id="game-instr">Catch the <b>RED FISH</b> 5 times! 🐟</div>
+        <div id="game-area" style="display:none; width:100%; height:100%; background:#b3e5fc; position:relative;">
+            <div id="game-instr">Click the <b>RED APPLE 🍎</b> 3 times at every spot!</div>
         </div>
         
         <div id="video-area" style="display:none; width:100%; height:100%;">
@@ -91,9 +89,9 @@
     </div>
 
     <div id="overlay">
-        <h1>Welcome to the Bird Discovery!</h1>
-        <p>Parents: Please ensure the child's face is visible in the bottom-left camera.</p>
-        <button class="btn" onclick="initExperience()">Start Game!</button>
+        <h1>🐦 Ready to find the birds?</h1>
+        <p>Click the button to start the game!</p>
+        <button onclick="initExperience()" style="padding:20px 60px; font-size:1.5rem; cursor:pointer; background:#ff7043; color:white; border:none; border-radius:50px;">Start!</button>
     </div>
 </div>
 
@@ -101,7 +99,6 @@
     const params = new URLSearchParams(window.location.search);
     const PID = params.get("pid") || "P001";
     const YT_ID = params.get("yt") || "905QNpTukIU";
-    
     document.getElementById('disp-pid').innerText = PID;
 
     let csvData = [["timestamp", "event", "video_time", "norm_x", "norm_y", "on_screen"]];
@@ -109,7 +106,15 @@
     let player = null;
     let isRecording = false;
 
-    // YouTube Setup
+    // 9-Point Grid Coordinates (%)
+    const points = [
+        [15, 15], [50, 15], [85, 15],
+        [15, 50], [50, 50], [85, 50],
+        [15, 85], [50, 85], [85, 85]
+    ];
+    let currentPointIndex = 0;
+    let clickCount = 0;
+
     const tag = document.createElement('script');
     tag.src = "https://www.youtube.com/iframe_api";
     document.head.appendChild(tag);
@@ -131,50 +136,56 @@
             }).begin();
 
         webgazer.showVideo(true).showPredictionPoints(true);
-        startFishGame();
+        startCalibrationGame();
     }
 
-    // --- CALIBRATION GAME ---
-    let fishCaught = 0;
-    function startFishGame() {
+    function startCalibrationGame() {
         document.getElementById('game-area').style.display = 'block';
-        spawnFish();
+        spawnPoint();
     }
 
-    function spawnFish() {
+    function spawnPoint() {
         const area = document.getElementById('game-area');
-        area.querySelectorAll('.fish').forEach(f => f.remove());
+        area.querySelectorAll('.fish-target, .fish-distractor').forEach(el => el.remove());
 
-        // Spawn 4 distraction "Blue Fish"
-        for(let i=0; i<4; i++) createFish(false);
-        // Spawn 1 target "Red Fish"
-        createFish(true);
-    }
+        if (currentPointIndex >= points.length) {
+            area.style.display = 'none';
+            startVideo();
+            return;
+        }
 
-    function createFish(isTarget) {
-        const f = document.createElement('div');
-        f.className = 'fish';
-        f.innerHTML = isTarget ? '🍎' : '💧'; // Using emojis for simplicity, could be fish icons
-        if(isTarget) f.style.filter = "hue-rotate(0deg)";
+        const [x, y] = points[currentPointIndex];
+
+        // 1. Create Distractors (Blue drops) around the target
+        for (let i = 0; i < 6; i++) {
+            const d = document.createElement('div');
+            d.className = 'fish-distractor';
+            d.innerHTML = '💧';
+            d.style.left = (x + (Math.random() * 20 - 10)) + "%";
+            d.style.top = (y + (Math.random() * 20 - 10)) + "%";
+            area.appendChild(d);
+        }
+
+        // 2. Create Target (Red Apple)
+        const t = document.createElement('div');
+        t.className = 'fish-target';
+        t.innerHTML = '🍎';
+        t.style.left = x + "%";
+        t.style.top = y + "%";
         
-        f.style.left = (Math.random() * 80 + 10) + "%";
-        f.style.top = (Math.random() * 70 + 15) + "%";
-
-        f.onclick = () => {
-            if(isTarget) {
-                fishCaught++;
-                if(fishCaught >= 5) {
-                    document.getElementById('game-area').style.display = 'none';
-                    startVideo();
-                } else {
-                    spawnFish();
-                }
+        t.onclick = () => {
+            clickCount++;
+            if (clickCount >= 3) {
+                clickCount = 0;
+                currentPointIndex++;
+                spawnPoint();
+            } else {
+                t.style.transform = `translate(-50%, -50%) scale(${1 + clickCount * 0.3})`;
             }
         };
-        document.getElementById('game-area').appendChild(f);
+        area.appendChild(t);
     }
 
-    // --- EXPERIMENT PHASE ---
     function startVideo() {
         document.getElementById('video-area').style.display = 'block';
         player.playVideo();
@@ -196,14 +207,10 @@
     }
 
     function updateSystem() {
-        // Update Debug Text
-        document.getElementById('disp-gaze').innerText = `${Math.round(currentGaze.x)}, ${Math.round(currentGaze.y)}`;
-        
         const onScreen = (currentGaze.x >= 0 && currentGaze.x <= window.innerWidth && 
                           currentGaze.y >= 0 && currentGaze.y <= window.innerHeight);
-        
         const screenSpan = document.getElementById('disp-screen');
-        screenSpan.innerText = onScreen ? "ON SCREEN" : "OFF SCREEN";
+        screenSpan.innerText = onScreen ? "LOOKING AT SCREEN" : "OFF SCREEN";
         screenSpan.className = onScreen ? "status-on" : "status-off";
     }
 
@@ -214,9 +221,7 @@
         const blob = new Blob([csvContent], { type: 'text/csv' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
-        a.download = `BIRDS_${PID}.csv`;
-        a.click();
+        a.href = url; a.download = `STUDY_${PID}.csv`; a.click();
     }
 </script>
 
