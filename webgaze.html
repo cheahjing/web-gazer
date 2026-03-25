@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Bird Study: Boss Battle Edition</title>
+    <title>Bird Study: Trophy Edition</title>
     <script src="https://cdn.jsdelivr.net/npm/webgazer@2.1.1/dist/webgazer.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #f8fbff; font-family: 'Comic Sans MS', cursive, sans-serif; overflow: hidden; }
@@ -22,62 +22,63 @@
             border-radius: 15px; transform: scaleX(-1); 
         }
 
-        .fish-target, #boss-fish { 
-            position: absolute; display: flex; align-items: center; 
+        .fish-target, .fish-distractor, #boss-fish { 
+            position: absolute; display: flex !important; align-items: center; 
             justify-content: center; background: transparent !important; 
             border: none !important; user-select: none;
         }
 
-        .fish-target { width: 100px; height: 100px; cursor: pointer; z-index: 1000; transform: translate(-50%, -50%); font-size: 60px; }
+        .fish-target { width: 100px; height: 100px; cursor: pointer; z-index: 1000; transform: translate(-50%, -50%); font-size: 60px; transition: transform 0.1s; }
+        .fish-distractor { width: 80px; height: 80px; z-index: 998; transform: translate(-50%, -50%); font-size: 45px; opacity: 0.5; pointer-events: none; }
         
-        /* The Boss Squid with Shrinking Animation */
-        #boss-fish { 
-            top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            font-size: 150px; z-index: 1200; display: none; 
-        }
+        #boss-fish { top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 160px; z-index: 1200; display: none; }
+        .shrinking { animation: shrink-boss 4s linear forwards; }
+        @keyframes shrink-boss { 0% { scale: 1; opacity: 1; } 100% { scale: 0.1; opacity: 0.5; } }
 
-        .shrinking {
-            animation: shrink-boss 4s linear forwards;
-        }
-
-        @keyframes shrink-boss {
-            0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-            100% { transform: translate(-50%, -50%) scale(0.1); opacity: 0.5; }
+        /* Victory Pop-up Styling */
+        #victory-modal {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: white; border: 10px solid #ffd700; border-radius: 30px;
+            padding: 40px; text-align: center; z-index: 2000; display: none;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
         }
 
         #video-area, #player { width: 100%; height: 100%; }
         #game-instr { position: absolute; top: 15px; width: 100%; text-align: center; font-size: 24px; color: #0077be; z-index: 1100; font-weight: bold; }
-        
         #debug-bar { position: fixed; top: 0; width: 100%; background: #333; color: white; padding: 10px 20px; z-index: 2147483646; display: flex; gap: 30px; font-family: monospace; }
         .status-on { color: #00ff00; font-weight: bold; }
         .status-off { color: #ff4444; font-weight: bold; }
-
         #overlay { position: fixed; inset: 0; background: #ffffff; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2147483645; text-align: center; padding: 40px; }
-        .btn { padding: 20px 60px; font-size: 1.5rem; cursor: pointer; background: #0077be; color: white; border: none; border-radius: 50px; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div id="debug-bar">
     <span>PID: <span id="disp-pid"></span></span>
-    <span>Fishes: <b id="fish-count">0</b></span>
-    <span>Status: <span id="disp-screen">--</span></span>
-    <button onclick="finishSession()" style="margin-left:auto; cursor:pointer;">💾 Save CSV</button>
+    <span>Score: <b id="fish-count">0</b></span>
+    <span>Gaze: <span id="disp-screen">--</span></span>
+    <button onclick="finishSession()" style="margin-left:auto;">💾 Save CSV</button>
 </div>
 
 <div id="app-viewport">
     <div id="stage">
         <div id="game-area" style="display:none; width:100%; height:100%; background:#ffffff; position:relative;">
-            <div id="game-instr">Catch 🐠 to find the Boss!</div>
+            <div id="game-instr">Catch the 🐠!</div>
             <div id="boss-fish">🦑</div>
+            
+            <div id="victory-modal">
+                <div style="font-size: 100px;">🏆</div>
+                <h2 style="color: #b8860b; margin: 10px 0;">AMAZING!</h2>
+                <p style="font-size: 20px;">Fishes Caught: <b id="final-fish-display">0</b></p>
+                <button onclick="closeVictory()" style="padding: 15px 40px; background: #ffd700; border: none; border-radius: 20px; font-weight: bold; cursor: pointer;">Watch Birds! 🐦</button>
+            </div>
         </div>
         <div id="video-area" style="display:none;"><div id="player"></div></div>
     </div>
 
     <div id="overlay">
-        <h1 style="color:#0077be;">🌊 Underwater Discovery</h1>
-        <p>Keep your head very still and catch the fish!</p>
-        <button class="btn" onclick="initExperience()">START</button>
+        <h1 style="color:#0077be;">🌊 Deep Sea Adventure</h1>
+        <button onclick="initExperience()" style="padding:20px 60px; font-size:1.5rem; cursor:pointer; background:#0077be; color:white; border:none; border-radius:50px; font-weight:bold;">START</button>
     </div>
 </div>
 
@@ -93,8 +94,10 @@
     let isRecording = false;
     let finalAccuracy = 0;
     let fishesCaughtTotal = 0;
+    let isBonusRound = false;
 
     const points = [[15,15],[85,15],[50,50],[15,85],[85,85],[50,15],[15,50],[85,50],[50,85]];
+    const bonusPoints = [[10,10], [90,10], [10,90], [90,90]];
     let currentPointIndex = 0;
     let clickCount = 0;
 
@@ -108,10 +111,7 @@
     async function initExperience() {
         document.getElementById('overlay').style.display = 'none';
         await webgazer.setRegression('ridge').setTracker('clmtrackr').setGazeListener((data) => {
-            if (data) {
-                currentGaze = { x: data.x, y: data.y };
-                updateOnScreenStatus();
-            }
+            if (data) { currentGaze = { x: data.x, y: data.y }; updateOnScreenStatus(); }
         }).begin();
         webgazer.showVideo(true).showPredictionPoints(true);
         document.getElementById('game-area').style.display = 'block';
@@ -120,10 +120,23 @@
 
     function spawnPoint() {
         const area = document.getElementById('game-area');
-        area.querySelectorAll('.fish-target').forEach(el => el.remove());
-        if (currentPointIndex >= points.length) { startBossBattle(); return; }
+        area.querySelectorAll('.fish-target, .fish-distractor').forEach(el => el.remove());
+        
+        const activePoints = isBonusRound ? bonusPoints : points;
+        
+        if (currentPointIndex >= activePoints.length) {
+            if (!isBonusRound) { startBossBattle(); } 
+            else { showVictoryPopup(); }
+            return;
+        }
 
-        const [x, y] = points[currentPointIndex];
+        const [x, y] = activePoints[currentPointIndex];
+        for (let i = 0; i < 3; i++) {
+            const d = document.createElement('div'); d.className = 'fish-distractor'; d.innerHTML = '🌊';
+            d.style.left = (x + (Math.random()*20-10)) + "%"; d.style.top = (y + (Math.random()*20-10)) + "%";
+            area.appendChild(d);
+        }
+
         const t = document.createElement('div'); t.className = 'fish-target'; t.innerHTML = '🐠';
         t.style.left = x + "%"; t.style.top = y + "%";
         t.onclick = () => {
@@ -139,9 +152,8 @@
 
     function startBossBattle() {
         const boss = document.getElementById('boss-fish');
-        document.getElementById('game-instr').innerHTML = "<b>BOSS BATTLE! Stare at the Squid to win!</b>";
-        boss.style.display = 'flex';
-        boss.classList.add('shrinking');
+        document.getElementById('game-instr').innerHTML = "<b>BOSS BATTLE! Stare at the Squid!</b>";
+        boss.style.display = 'flex'; boss.classList.add('shrinking');
         
         let samples = [];
         const stageBox = document.getElementById('stage').getBoundingClientRect();
@@ -160,10 +172,28 @@
             
             fishesCaughtTotal++;
             document.getElementById('fish-count').innerText = fishesCaughtTotal;
-            
-            document.getElementById('game-area').style.display = 'none';
-            startVideo();
+            boss.style.display = 'none';
+
+            if (finalAccuracy < 70) {
+                isBonusRound = true;
+                currentPointIndex = 0;
+                document.getElementById('game-instr').innerHTML = "<b>🌟 BONUS ROUND! Catch 4 more fish! 🌟</b>";
+                spawnPoint();
+            } else {
+                showVictoryPopup();
+            }
         }, 4000);
+    }
+
+    function showVictoryPopup() {
+        document.getElementById('game-instr').style.display = 'none';
+        document.getElementById('final-fish-display').innerText = fishesCaughtTotal;
+        document.getElementById('victory-modal').style.display = 'block';
+    }
+
+    function closeVictory() {
+        document.getElementById('game-area').style.display = 'none';
+        startVideo();
     }
 
     function updateOnScreenStatus() {
@@ -184,8 +214,7 @@
                 const stageBox = document.getElementById('stage').getBoundingClientRect();
                 const normX = (currentGaze.x - stageBox.left) / stageBox.width;
                 const normY = (currentGaze.y - stageBox.top) / stageBox.height;
-                const onScreen = (currentGaze.x >= 0 && currentGaze.x <= window.innerWidth && currentGaze.y >= 0 && currentGaze.y <= window.innerHeight) ? 1 : 0;
-                csvData.push([new Date().toISOString(), "video", player.getCurrentTime().toFixed(2), normX.toFixed(4), normY.toFixed(4), onScreen, finalAccuracy.toFixed(1)]);
+                csvData.push([new Date().toISOString(), "video", player.getCurrentTime().toFixed(2), normX.toFixed(4), normY.toFixed(4), (normX >=0 && normX <=1 ? 1 : 0), finalAccuracy.toFixed(1)]);
             }
         }, 1000);
     }
