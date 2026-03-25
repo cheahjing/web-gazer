@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Bird Study: Deep Sea Adventure</title>
+    <title>Bird Study: Steady Boss Version</title>
     <script src="https://cdn.jsdelivr.net/npm/webgazer@2.1.1/dist/webgazer.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #f8fbff; font-family: 'Comic Sans MS', cursive, sans-serif; overflow: hidden; }
@@ -31,19 +31,19 @@
         .fish-target { width: 100px; height: 100px; cursor: pointer; z-index: 1000; transform: translate(-50%, -50%); font-size: 60px; }
         .fish-distractor { width: 80px; height: 80px; z-index: 998; transform: translate(-50%, -50%); font-size: 45px; opacity: 0.5; pointer-events: none; }
         
+        /* FIXED: Boss stays large and steady for better tracking */
         #boss-fish { 
             top: 50%; left: 50%; transform: translate(-50%, -50%); 
             font-size: 160px; z-index: 1200; 
             display: none; opacity: 0; pointer-events: none;
+            transition: opacity 0.5s;
         }
 
-        .shrinking { 
-            display: flex !important; opacity: 1 !important; 
+        .boss-active { 
+            display: flex !important; 
+            opacity: 1 !important; 
             pointer-events: auto !important;
-            animation: shrink-boss 4s linear forwards; 
         }
-
-        @keyframes shrink-boss { 0% { scale: 1; opacity: 1; } 100% { scale: 0.1; opacity: 0.5; } }
 
         #victory-modal {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -76,7 +76,7 @@
             
             <div id="victory-modal">
                 <div style="font-size: 100px;">🏆</div>
-                <h2 style="color: #b8860b;">SQUID DEFEATED!</h2>
+                <h2 style="color: #b8860b;">YOU DID IT!</h2>
                 <p style="font-size: 24px;">Fishes Caught: <b id="final-fish-display">--</b></p>
                 <button onclick="closeVictory()" style="padding: 15px 40px; background: #ffd700; border: none; border-radius: 20px; font-weight: bold; cursor: pointer;">WATCH BIRDS 🐦</button>
             </div>
@@ -86,7 +86,7 @@
 
     <div id="overlay">
         <h1 style="color:#0077be;">🌊 Deep Sea Discovery</h1>
-        <p>Catch the fish and defeat the boss to unlock the birds!</p>
+        <p>Stay very still and catch the fish to win!</p>
         <button onclick="initExperience()" style="padding:20px 60px; font-size:1.5rem; cursor:pointer; background:#0077be; color:white; border:none; border-radius:50px; font-weight:bold;">START</button>
     </div>
 </div>
@@ -105,7 +105,7 @@
     let isBonusRound = false;
 
     const points = [[15,15],[85,15],[50,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
-    const bonusPoints = [[10,10], [90,10], [10,90], [90,90]];
+    const bonusPoints = [[12,12], [88,12], [12,88], [88,88]];
     let currentPointIndex = 0;
     let clickCount = 0;
 
@@ -118,9 +118,11 @@
 
     async function initExperience() {
         document.getElementById('overlay').style.display = 'none';
-        await webgazer.setRegression('ridge').setTracker('clmtrackr').setGazeListener((data) => {
+        // Reset and start fresh
+        await webgazer.setRegression('ridge').setGazeListener((data) => {
             if (data) { currentGaze = { x: data.x, y: data.y }; updateOnScreenStatus(); }
         }).begin();
+        
         webgazer.showVideo(true).showPredictionPoints(true);
         document.getElementById('game-area').style.display = 'block';
         spawnPoint();
@@ -151,7 +153,7 @@
             clickCount++;
             if (clickCount >= 3) { 
                 clickCount = 0; currentPointIndex++; spawnPoint(); 
-            } else { t.style.transform = `translate(-50%, -50%) scale(${1 + clickCount * 0.4})`; }
+            } else { t.style.transform = `translate(-50%, -50%) scale(${1 + clickCount * 0.3})`; }
         };
         area.appendChild(t);
     }
@@ -159,7 +161,7 @@
     function startBossBattle() {
         const boss = document.getElementById('boss-fish');
         document.getElementById('game-instr').innerHTML = "<b>SQUID ATTACK! Stare at the Boss to win!</b>";
-        boss.classList.add('shrinking');
+        boss.classList.add('boss-active');
         
         let samples = [];
         const stageBox = document.getElementById('stage').getBoundingClientRect();
@@ -175,9 +177,9 @@
             clearInterval(checkInterval);
             const avgDist = samples.reduce((a, b) => a + b, 0) / samples.length;
             
-            // Map distance to a score 0-100
-            finalAccuracy = Math.max(0, Math.min(100, 100 - (avgDist / 5))); 
-            boss.classList.remove('shrinking');
+            // Calibration score calculation
+            finalAccuracy = Math.max(0, Math.min(100, 100 - (avgDist / 4.5))); 
+            boss.classList.remove('boss-active');
 
             if (finalAccuracy < 70 && !isBonusRound) {
                 isBonusRound = true;
@@ -192,7 +194,6 @@
 
     function showVictoryPopup() {
         document.getElementById('game-instr').style.display = 'none';
-        // We show the accuracy integer as the "Fish Count"
         document.getElementById('final-fish-display').innerText = Math.round(finalAccuracy);
         document.getElementById('victory-modal').style.display = 'block';
     }
