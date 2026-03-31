@@ -2,49 +2,94 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Bird Study: Confidence Build</title>
+    <title>Bird Study: The Stare Down</title>
     <script src="https://cdn.jsdelivr.net/npm/webgazer@2.1.1/dist/webgazer.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #f8fbff; font-family: 'Comic Sans MS', cursive, sans-serif; overflow: hidden; }
         #app-viewport { position: relative; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
-        #stage { position: relative; width: 85%; height: 80%; background: #ffffff; border: 8px solid #0077be; border-radius: 25px; z-index: 10; overflow: hidden; }
-        #webgazerVideoFeed { display: block !important; position: fixed !important; bottom: 20px !important; left: 20px !important; width: 200px !important; height: auto !important; z-index: 2147483647 !important; border: 4px solid #0077be; border-radius: 15px; transform: scaleX(-1); }
-        .fish-target { position: absolute; display: flex !important; align-items: center; justify-content: center; width: 100px; height: 100px; cursor: pointer; z-index: 1000; transform: translate(-50%, -50%); font-size: 60px; transition: opacity 0.2s; }
-        #boss-fish { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 120px; z-index: 1200; display: none; opacity: 0; pointer-events: none; }
-        .boss-active { display: flex !important; opacity: 1 !important; }
-        #countdown-overlay { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(255,255,255,0.8); z-index: 1500; font-size: 150px; color: #ff4444; font-weight: bold; }
-        #victory-modal { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border: 10px solid #ffd700; border-radius: 30px; padding: 40px; text-align: center; z-index: 2000; display: none; }
-        #debug-bar { position: fixed; top: 0; width: 100%; background: #333; color: white; padding: 10px 20px; z-index: 2147483646; display: flex; gap: 30px; font-family: monospace; }
-        .status-on { color: #00ff00; } .status-off { color: #ff4444; }
-        #overlay { position: fixed; inset: 0; background: #ffffff; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2147483645; }
+        
+        #stage { 
+            position: relative; width: 85%; height: 80%; 
+            background: #ffffff; border: 8px solid #0077be; border-radius: 25px; 
+            z-index: 10; overflow: hidden; 
+        }
+
+        #webgazerVideoFeed { 
+            display: block !important; position: fixed !important; 
+            bottom: 20px !important; left: 20px !important; 
+            width: 200px !important; height: auto !important; 
+            z-index: 2147483647 !important; border: 4px solid #0077be; 
+            border-radius: 15px; transform: scaleX(-1); 
+        }
+
+        .fish-target, .fish-distractor, #boss-fish { 
+            position: absolute; display: flex !important; align-items: center; 
+            justify-content: center; background: transparent !important; 
+            border: none !important; user-select: none;
+        }
+
+        .fish-target { width: 100px; height: 100px; cursor: pointer; z-index: 1000; transform: translate(-50%, -50%); font-size: 60px; }
+        .fish-distractor { width: 80px; height: 80px; z-index: 998; transform: translate(-50%, -50%); font-size: 45px; opacity: 0.5; pointer-events: none; }
+        
+        #boss-fish { 
+            top: 50%; left: 50%; transform: translate(-50%, -50%); 
+            font-size: 160px; z-index: 1200; 
+            display: none; opacity: 0; pointer-events: none;
+        }
+
+        .boss-active { display: flex !important; opacity: 1 !important; pointer-events: auto !important; }
+
+        /* Countdown Style */
+        #countdown-overlay {
+            position: absolute; inset: 0; display: none; align-items: center; 
+            justify-content: center; background: rgba(255,255,255,0.8);
+            z-index: 1500; font-size: 150px; color: #ff4444; font-weight: bold;
+        }
+
+        #victory-modal {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: white; border: 10px solid #ffd700; border-radius: 30px;
+            padding: 40px; text-align: center; z-index: 2000; display: none;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+        }
+
+        #video-area, #player { width: 100%; height: 100%; }
+        #game-instr { position: absolute; top: 15px; width: 100%; text-align: center; font-size: 24px; color: #0077be; z-index: 1100; font-weight: bold; }
+        #debug-bar { position: fixed; top: 0; width: 100%; background: #333; color: white; padding: 10px 20px; z-index: 2147483646; display: flex; gap: 30px; }
+        .status-on { color: #00ff00; font-weight: bold; }
+        .status-off { color: #ff4444; font-weight: bold; }
+        #overlay { position: fixed; inset: 0; background: #ffffff; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2147483645; text-align: center; }
     </style>
 </head>
 <body>
 
 <div id="debug-bar">
     <span>PID: <span id="disp-pid"></span></span>
-    <span>Gaze Status: <span id="disp-screen">--</span></span>
-    <button onclick="finishSession()" style="margin-left:auto;">💾 Save CSV</button>
+    <span>Gaze: <span id="disp-screen">--</span></span>
+    <button onclick="finishSession()" style="margin-left:auto; cursor:pointer;">💾 Save CSV</button>
 </div>
 
 <div id="app-viewport">
     <div id="stage">
-        <div id="game-area" style="display:none; width:100%; height:100%; position:relative;">
-            <div id="game-instr" style="position:absolute; top:20px; width:100%; text-align:center; font-weight:bold; color:#0077be;">Catch 3 fish in each spot!</div>
+        <div id="game-area" style="display:none; width:100%; height:100%; background:#ffffff; position:relative;">
+            <div id="game-instr">Catch the 🐠!</div>
             <div id="countdown-overlay">3</div>
             <div id="boss-fish">🦑</div>
+            
             <div id="victory-modal">
-                <div style="font-size: 80px;">🎯</div>
-                <h2>CALIBRATION COMPLETE</h2>
-                <p>Quality Score: <b id="final-fish-display">--</b>%</p>
-                <button onclick="closeVictory()" style="padding:15px 30px; cursor:pointer;">START BIRD STUDY</button>
+                <div style="font-size: 100px;">🏆</div>
+                <h2 style="color: #b8860b;">GREAT JOB!</h2>
+                <p style="font-size: 24px;">Fishes Caught: <b id="final-fish-display">--</b></p>
+                <button onclick="closeVictory()" style="padding: 15px 40px; background: #ffd700; border: none; border-radius: 20px; font-weight: bold; cursor: pointer;">WATCH BIRDS 🐦</button>
             </div>
         </div>
         <div id="video-area" style="display:none;"><div id="player"></div></div>
     </div>
+
     <div id="overlay">
-        <h1>🌊 Research Calibration</h1>
-        <button onclick="initExperience()" style="padding:20px 50px; font-size:1.5rem; cursor:pointer;">START</button>
+        <h1 style="color:#0077be;">🌊 Deep Sea Discovery</h1>
+        <p>Get ready to catch the fish!</p>
+        <button onclick="initExperience()" style="padding:20px 60px; font-size:1.5rem; cursor:pointer; background:#0077be; color:white; border:none; border-radius:50px; font-weight:bold;">START ADVENTURE</button>
     </div>
 </div>
 
@@ -54,30 +99,31 @@
     const YT_ID = params.get("yt") || "905QNpTukIU";
     document.getElementById('disp-pid').innerText = PID;
 
-    let csvData = [["timestamp", "event", "video_time", "norm_x", "norm_y", "on_screen", "score"]];
+    let csvData = [["timestamp", "event", "video_time", "norm_x", "norm_y", "on_screen", "accuracy_score"]];
     let currentGaze = { x: 0, y: 0 };
     let player = null;
     let isRecording = false;
     let finalAccuracy = 0;
-    
+    let isBonusRound = false;
+
     const points = [[15,15],[85,15],[50,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
+    const bonusPoints = [[12,12], [88,12], [12,88], [88,88]];
     let currentPointIndex = 0;
     let clickCount = 0;
-    let isFrozen = false;
 
+    const tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
     window.onYouTubeIframeAPIReady = () => {
-        player = new YT.Player('player', { videoId: YT_ID, width: '100%', height: '100%', playerVars: { controls: 0 } });
+        player = new YT.Player('player', { videoId: YT_ID, width: '100%', height: '100%', playerVars: { controls: 0, disablekb: 1, rel: 0 } });
     };
 
     async function initExperience() {
         document.getElementById('overlay').style.display = 'none';
-        // USE THREADEDRIDGE FOR SMOOTHER GAZE
-        await webgazer.setRegression('threadedridge').setGazeListener((data) => {
-            if (data) { 
-                currentGaze = { x: data.x, y: data.y }; 
-                updateOnScreenStatus(); 
-            }
+        await webgazer.setRegression('ridge').setGazeListener((data) => {
+            if (data) { currentGaze = { x: data.x, y: data.y }; updateOnScreenStatus(); }
         }).begin();
+        
         webgazer.showVideo(true).showPredictionPoints(true);
         document.getElementById('game-area').style.display = 'block';
         spawnPoint();
@@ -85,54 +131,51 @@
 
     function spawnPoint() {
         const area = document.getElementById('game-area');
-        area.querySelectorAll('.fish-target').forEach(el => el.remove());
+        area.querySelectorAll('.fish-target, .fish-distractor').forEach(el => el.remove());
+        const activePoints = isBonusRound ? bonusPoints : points;
         
-        if (currentPointIndex >= points.length) {
-            triggerCountdown();
+        if (currentPointIndex >= activePoints.length) {
+            if (!isBonusRound) { triggerCountdown(); } 
+            else { showVictoryPopup(); }
             return;
         }
 
-        const [x, y] = points[currentPointIndex];
-        const t = document.createElement('div'); 
-        t.className = 'fish-target'; t.innerHTML = '🐠';
+        const [x, y] = activePoints[currentPointIndex];
+        const t = document.createElement('div'); t.className = 'fish-target'; t.innerHTML = '🐠';
         t.style.left = x + "%"; t.style.top = y + "%";
-        
         t.onclick = () => {
-            if(isFrozen) return;
             clickCount++;
-            
-            if (clickCount >= 3) {
-                isFrozen = true;
-                t.style.opacity = "0.5";
-                // THE GOLDEN SECOND: Wait 400ms before moving to ensure data lock
-                setTimeout(() => {
-                    clickCount = 0;
-                    currentPointIndex++;
-                    isFrozen = false;
-                    spawnPoint();
-                }, 400);
-            } else {
-                t.style.transform = `translate(-50%, -50%) scale(${1 + clickCount * 0.3})`;
-            }
+            if (clickCount >= 3) { clickCount = 0; currentPointIndex++; spawnPoint(); }
+            else { t.style.transform = `translate(-50%, -50%) scale(${1 + clickCount * 0.3})`; }
         };
         area.appendChild(t);
     }
 
     function triggerCountdown() {
-        const cd = document.getElementById('countdown-overlay');
-        cd.style.display = 'flex';
+        const cdOverlay = document.getElementById('countdown-overlay');
+        document.getElementById('game-instr').innerHTML = "<b>Get ready for the Boss!</b>";
+        cdOverlay.style.display = 'flex';
+        
         let count = 3;
         const timer = setInterval(() => {
             count--;
-            if (count > 0) cd.innerText = count;
-            else if (count === 0) cd.innerText = "STARE!";
-            else { clearInterval(timer); cd.style.display = 'none'; startBossBattle(); }
+            if (count > 0) {
+                cdOverlay.innerText = count;
+            } else if (count === 0) {
+                cdOverlay.innerText = "STARE!";
+            } else {
+                clearInterval(timer);
+                cdOverlay.style.display = 'none';
+                startBossBattle();
+            }
         }, 1000);
     }
 
     function startBossBattle() {
         const boss = document.getElementById('boss-fish');
+        document.getElementById('game-instr').innerHTML = "<b>DON'T LOOK AWAY!</b>";
         boss.classList.add('boss-active');
+        
         let samples = [];
         const stageBox = document.getElementById('stage').getBoundingClientRect();
         const targetX = stageBox.left + (stageBox.width / 2);
@@ -145,19 +188,33 @@
 
         setTimeout(() => {
             clearInterval(checkInterval);
-            // Ignore the first 5 samples (the adjustment period) for a cleaner score
-            const cleanSamples = samples.slice(5);
-            const avgDist = cleanSamples.reduce((a, b) => a + b, 0) / cleanSamples.length;
-            finalAccuracy = Math.max(0, Math.min(100, 100 - (avgDist / 4.2))); 
-            document.getElementById('final-fish-display').innerText = Math.round(finalAccuracy);
-            document.getElementById('victory-modal').style.display = 'block';
+            const avgDist = samples.reduce((a, b) => a + b, 0) / samples.length;
+            finalAccuracy = Math.max(0, Math.min(100, 100 - (avgDist / 4.5))); 
+            boss.classList.remove('boss-active');
+
+            if (finalAccuracy < 70 && !isBonusRound) {
+                isBonusRound = true; currentPointIndex = 0;
+                document.getElementById('game-instr').innerHTML = "<b>🌟 BONUS ROUND! Catch 4 more! 🌟</b>";
+                spawnPoint();
+            } else {
+                showVictoryPopup();
+            }
         }, 4000);
+    }
+
+    function showVictoryPopup() {
+        document.getElementById('game-instr').style.display = 'none';
+        document.getElementById('final-fish-display').innerText = Math.round(finalAccuracy);
+        document.getElementById('victory-modal').style.display = 'block';
     }
 
     function closeVictory() {
         document.getElementById('game-area').style.display = 'none';
         document.getElementById('video-area').style.display = 'block';
+        
+        // HIDE RED DOT HERE
         webgazer.showPredictionPoints(false); 
+        
         player.playVideo();
         isRecording = true;
         setInterval(logData, 1000);
@@ -168,23 +225,26 @@
         const stageBox = document.getElementById('stage').getBoundingClientRect();
         const normX = (currentGaze.x - stageBox.left) / stageBox.width;
         const normY = (currentGaze.y - stageBox.top) / stageBox.height;
-        csvData.push([new Date().toISOString(), "video", player.getCurrentTime().toFixed(2), normX.toFixed(4), normY.toFixed(4), (normX >= 0 && normX <= 1 ? 1 : 0), finalAccuracy]);
+        csvData.push([new Date().toISOString(), "video", player.getCurrentTime().toFixed(2), normX.toFixed(4), normY.toFixed(4), (normX >= 0 && normX <= 1 ? 1 : 0), finalAccuracy.toFixed(1)]);
     }
 
     function updateOnScreenStatus() {
-        const screenSpan = document.getElementById('disp-screen');
         const onScreen = (currentGaze.x >= 0 && currentGaze.x <= window.innerWidth && currentGaze.y >= 0 && currentGaze.y <= window.innerHeight);
-        screenSpan.innerText = onScreen ? "IN" : "OUT";
-        screenSpan.className = onScreen ? "status-on" : "status-off";
+        const screenSpan = document.getElementById('disp-screen');
+        if (screenSpan) {
+            screenSpan.innerText = onScreen ? "IN" : "OUT";
+            screenSpan.className = onScreen ? "status-on" : "status-off";
+        }
     }
 
     function finishSession() {
+        isRecording = false;
+        webgazer.pause();
         const csvContent = csvData.map(e => e.join(",")).join("\n");
         const blob = new Blob([csvContent], { type: 'text/csv' });
         const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = `STUDY_${PID}.csv`; a.click();
+        const a = document.createElement('a'); a.href = url; a.download = `BIRDS_${PID}.csv`; a.click();
     }
 </script>
-<script src="https://www.youtube.com/iframe_api"></script>
 </body>
 </html>
