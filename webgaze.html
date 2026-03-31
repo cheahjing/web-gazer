@@ -2,18 +2,16 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Bird Study: Sea Monster's Return</title>
+    <title>Bird Study: Final Refinements</title>
     <script src="https://cdn.jsdelivr.net/npm/webgazer@2.1.1/dist/webgazer.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #f8fbff; font-family: 'Comic Sans MS', cursive, sans-serif; overflow: hidden; }
         
-        /* Fixed centering for the entire app */
         #app-viewport { 
             position: relative; 
             width: 100vw; 
             height: 100vh; 
             display: flex; 
-            flex-direction: column;
             align-items: center; 
             justify-content: center; 
         }
@@ -24,7 +22,6 @@
             z-index: 10; overflow: hidden; 
         }
 
-        /* Webgazer Camera Feed */
         #webgazerVideoFeed { 
             display: block !important; position: fixed !important; 
             bottom: 20px !important; left: 20px !important; 
@@ -33,7 +30,7 @@
             border-radius: 15px; transform: scaleX(-1); 
         }
 
-        /* Game Elements */
+        /* Fish Styling */
         .fish-target { 
             position: absolute; display: flex !important; align-items: center; 
             justify-content: center; border: none !important; user-select: none;
@@ -41,23 +38,15 @@
             font-size: 70px; transition: filter 0.3s, transform 0.2s;
             z-index: 1000;
         }
-
         .fish-red { filter: grayscale(1) sepia(1) saturate(10) hue-rotate(-50deg); cursor: default; }
         .fish-blue { filter: none; cursor: pointer; }
 
-        /* The Sea Monster (Squid) */
+        /* The Sea Monster */
         #boss-fish { 
-            position: absolute;
-            top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            font-size: 200px; z-index: 2000; 
-            display: none; opacity: 0; pointer-events: none;
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+            font-size: 200px; z-index: 2000; display: none; opacity: 0; pointer-events: none;
         }
-
-        .boss-active { 
-            display: flex !important; 
-            opacity: 1 !important; 
-            pointer-events: auto !important; 
-        }
+        .boss-active { display: flex !important; opacity: 1 !important; pointer-events: auto !important; }
 
         /* Overlays */
         #countdown-overlay {
@@ -65,15 +54,11 @@
             justify-content: center; background: rgba(255,255,255,0.8);
             z-index: 1500; font-size: 150px; color: #ff4444; font-weight: bold;
         }
-
         #victory-modal {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: white; border: 10px solid #ffd700; border-radius: 30px;
             padding: 40px; text-align: center; z-index: 3000; display: none;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
-
-        /* Centered Start Overlay */
         #overlay { 
             position: fixed; inset: 0; background: #f8fbff; 
             display: flex; flex-direction: column; align-items: center; 
@@ -82,7 +67,11 @@
 
         #video-area, #player { width: 100%; height: 100%; }
         #game-instr { position: absolute; top: 15px; width: 100%; text-align: center; font-size: 24px; color: #0077be; z-index: 1100; font-weight: bold; }
+        
+        /* Debug Bar with restored colors */
         #debug-bar { position: fixed; top: 0; width: 100%; background: #333; color: white; padding: 10px 20px; z-index: 2147483646; display: flex; gap: 30px; font-family: monospace; }
+        .status-on { color: #00ff00; font-weight: bold; } /* GREEN */
+        .status-off { color: #ff4444; font-weight: bold; } /* RED */
     </style>
 </head>
 <body>
@@ -96,13 +85,13 @@
 <div id="app-viewport">
     <div id="stage">
         <div id="game-area" style="display:none; width:100%; height:100%; background:#ffffff; position:relative;">
-            <div id="game-instr">Stare at the Red Fish... wait for BLUE to catch!</div>
+            <div id="game-instr">Stare at the Red Fish... catch it when it's BLUE!</div>
             <div id="countdown-overlay">3</div>
             <div id="boss-fish">🦑</div>
             
             <div id="victory-modal">
                 <div style="font-size: 100px;">🏆</div>
-                <h2 style="color: #b8860b;">AWESOME!</h2>
+                <h2 style="color: #b8860b;">GREAT JOB!</h2>
                 <p style="font-size: 24px;">Fishes Caught: <b id="final-fish-display">--</b></p>
                 <button onclick="closeVictory()" style="padding: 15px 40px; background: #ffd700; border: none; border-radius: 20px; font-weight: bold; cursor: pointer;">WATCH BIRDS 🐦</button>
             </div>
@@ -112,8 +101,7 @@
 
     <div id="overlay">
         <h1 style="color:#0077be; font-size: 3rem; margin-bottom: 20px;">🌊 Deep Sea Discovery</h1>
-        <p style="font-size: 1.2rem; margin-bottom: 30px;">Catch all the fish to find the Sea Monster!</p>
-        <button onclick="initExperience()" style="padding:25px 80px; font-size:2rem; cursor:pointer; background:#0077be; color:white; border:none; border-radius:60px; font-weight:bold; box-shadow: 0 10px 20px rgba(0,119,190,0.3);">START</button>
+        <button onclick="initExperience()" style="padding:25px 80px; font-size:2rem; cursor:pointer; background:#0077be; color:white; border:none; border-radius:60px; font-weight:bold;">START</button>
     </div>
 </div>
 
@@ -168,8 +156,7 @@
         const t = document.createElement('div'); 
         t.className = 'fish-target fish-red'; 
         t.innerHTML = '🐠';
-        t.style.left = x + "%"; 
-        t.style.top = y + "%";
+        t.style.left = x + "%"; t.style.top = y + "%";
         canClick = false;
 
         setTimeout(() => {
@@ -182,9 +169,7 @@
             if (!canClick) return;
             clickCount++;
             if (clickCount >= 3) { 
-                clickCount = 0; 
-                currentPointIndex++; 
-                spawnPoint(); 
+                clickCount = 0; currentPointIndex++; spawnPoint(); 
             } else { 
                 t.style.transform = `translate(-50%, -50%) scale(${1 + clickCount * 0.3})`; 
             }
@@ -200,18 +185,13 @@
             count--;
             if (count > 0) cdOverlay.innerText = count;
             else if (count === 0) cdOverlay.innerText = "STARE!";
-            else { 
-                clearInterval(timer); 
-                cdOverlay.style.display = 'none'; 
-                startBossBattle(); 
-            }
+            else { clearInterval(timer); cdOverlay.style.display = 'none'; startBossBattle(); }
         }, 1000);
     }
 
     function startBossBattle() {
         const boss = document.getElementById('boss-fish');
-        boss.classList.add('boss-active'); // This reveals the monster
-        
+        boss.classList.add('boss-active');
         let samples = [];
         const stageBox = document.getElementById('stage').getBoundingClientRect();
         const targetX = stageBox.left + (stageBox.width / 2);
@@ -228,14 +208,11 @@
                 const avgDist = samples.reduce((a, b) => a + b, 0) / samples.length;
                 finalAccuracy = Math.max(0, Math.min(100, 100 - (avgDist / 4.5))); 
                 boss.classList.remove('boss-active');
-
                 if (finalAccuracy < 70 && !isBonusRound) {
                     isBonusRound = true; currentPointIndex = 0;
                     document.getElementById('game-instr').innerHTML = "<b>🌟 BONUS ROUND! Catch 4 more! 🌟</b>";
                     spawnPoint();
-                } else { 
-                    showVictoryPopup(); 
-                }
+                } else { showVictoryPopup(); }
             }, 4000);
         }, 500);
     }
