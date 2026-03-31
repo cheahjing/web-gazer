@@ -2,19 +2,11 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Bird Study: Final Refinements</title>
+    <title>Bird Study: High-Precision Edition</title>
     <script src="https://cdn.jsdelivr.net/npm/webgazer@2.1.1/dist/webgazer.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #f8fbff; font-family: 'Comic Sans MS', cursive, sans-serif; overflow: hidden; }
-        
-        #app-viewport { 
-            position: relative; 
-            width: 100vw; 
-            height: 100vh; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-        }
+        #app-viewport { position: relative; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
         
         #stage { 
             position: relative; width: 85%; height: 80%; 
@@ -30,7 +22,6 @@
             border-radius: 15px; transform: scaleX(-1); 
         }
 
-        /* Fish Styling */
         .fish-target { 
             position: absolute; display: flex !important; align-items: center; 
             justify-content: center; border: none !important; user-select: none;
@@ -41,14 +32,13 @@
         .fish-red { filter: grayscale(1) sepia(1) saturate(10) hue-rotate(-50deg); cursor: default; }
         .fish-blue { filter: none; cursor: pointer; }
 
-        /* The Sea Monster */
+        /* FIXED: Boss is now 50% smaller (100px instead of 200px) */
         #boss-fish { 
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            font-size: 200px; z-index: 2000; display: none; opacity: 0; pointer-events: none;
+            font-size: 100px; z-index: 2000; display: none; opacity: 0; pointer-events: none;
         }
         .boss-active { display: flex !important; opacity: 1 !important; pointer-events: auto !important; }
 
-        /* Overlays */
         #countdown-overlay {
             position: absolute; inset: 0; display: none; align-items: center; 
             justify-content: center; background: rgba(255,255,255,0.8);
@@ -68,10 +58,9 @@
         #video-area, #player { width: 100%; height: 100%; }
         #game-instr { position: absolute; top: 15px; width: 100%; text-align: center; font-size: 24px; color: #0077be; z-index: 1100; font-weight: bold; }
         
-        /* Debug Bar with restored colors */
         #debug-bar { position: fixed; top: 0; width: 100%; background: #333; color: white; padding: 10px 20px; z-index: 2147483646; display: flex; gap: 30px; font-family: monospace; }
-        .status-on { color: #00ff00; font-weight: bold; } /* GREEN */
-        .status-off { color: #ff4444; font-weight: bold; } /* RED */
+        .status-on { color: #00ff00; font-weight: bold; }
+        .status-off { color: #ff4444; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -133,9 +122,17 @@
 
     async function initExperience() {
         document.getElementById('overlay').style.display = 'none';
-        await webgazer.setRegression('ridge').setGazeListener((data) => {
-            if (data) { currentGaze = { x: data.x, y: data.y }; updateOnScreenStatus(); }
-        }).begin();
+        
+        // RESTORED: Advanced Tracking Sensitivity
+        await webgazer.setRegression('ridge')
+            .setTracker('clmtrackr') // Re-adding the face-shape tracker
+            .setGazeListener((data) => {
+                if (data) { 
+                    currentGaze = { x: data.x, y: data.y }; 
+                    updateOnScreenStatus(); 
+                }
+            }).begin();
+        
         webgazer.showVideo(true).showPredictionPoints(true);
         document.getElementById('game-area').style.display = 'block';
         spawnPoint();
@@ -241,6 +238,7 @@
     }
 
     function updateOnScreenStatus() {
+        // High sensitivity check: also checks if WebGazer is detecting a face
         const onScreen = (currentGaze.x >= 0 && currentGaze.x <= window.innerWidth && currentGaze.y >= 0 && currentGaze.y <= window.innerHeight);
         const screenSpan = document.getElementById('disp-screen');
         if (screenSpan) {
