@@ -1,298 +1,61 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Bird Study: Final High-Precision Build</title>
-    <script src="https://cdn.jsdelivr.net/npm/webgazer@2.1.1/dist/webgazer.min.js"></script>
-    <style>
-        body { margin: 0; padding: 0; background-color: #f8fbff; font-family: 'Comic Sans MS', cursive, sans-serif; overflow: hidden; }
-        
-        #app-viewport { 
-            position: relative; width: 100vw; height: 100vh; 
-            display: flex; align-items: center; justify-content: center; 
-        }
-        
-        #stage { 
-            position: relative; width: 85%; height: 80%; 
-            background: #ffffff; border: 8px solid #0077be; border-radius: 25px; 
-            z-index: 10; overflow: hidden; 
-        }
-
-        #webgazerVideoFeed { 
-            display: block !important; position: fixed !important; 
-            bottom: 20px !important; left: 20px !important; 
-            width: 200px !important; height: auto !important; 
-            z-index: 2147483647 !important; border: 4px solid #0077be; 
-            border-radius: 15px; transform: scaleX(-1); 
-        }
-
-        /* Fish Styling */
-        .fish-target { 
-            position: absolute; display: flex !important; align-items: center; 
-            justify-content: center; border: none !important; user-select: none;
-            width: 120px; height: 120px; transform: translate(-50%, -50%); 
-            font-size: 70px; transition: filter 0.3s, transform 0.2s;
-            z-index: 1000;
-        }
-        .fish-red { filter: grayscale(1) sepia(1) saturate(10) hue-rotate(-50deg); cursor: default; }
-        .fish-blue { filter: none; cursor: pointer; }
-
-        /* The Mini-Monster (50% smaller) */
-        #boss-fish { 
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            font-size: 100px; z-index: 2000; display: none; opacity: 0; pointer-events: none;
-        }
-        .boss-active { display: flex !important; opacity: 1 !important; pointer-events: auto !important; }
-
-        /* Overlays */
-        #countdown-overlay {
-            position: absolute; inset: 0; display: none; align-items: center; 
-            justify-content: center; background: rgba(255,255,255,0.8);
-            z-index: 1500; font-size: 150px; color: #ff4444; font-weight: bold;
-        }
-        #victory-modal {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: white; border: 10px solid #ffd700; border-radius: 30px;
-            padding: 40px; text-align: center; z-index: 3000; display: none;
-        }
-        #overlay { 
-            position: fixed; inset: 0; background: #f8fbff; 
-            display: flex; flex-direction: column; align-items: center; 
-            justify-content: center; z-index: 2147483645; text-align: center; 
-        }
-
-        #video-area, #player { width: 100%; height: 100%; }
-        #game-instr { position: absolute; top: 15px; width: 100%; text-align: center; font-size: 24px; color: #0077be; z-index: 1100; font-weight: bold; }
-        
-        /* Debug Bar */
-        #debug-bar { position: fixed; top: 0; width: 100%; background: #333; color: white; padding: 10px 20px; z-index: 2147483646; display: flex; gap: 30px; font-family: monospace; }
-        .status-on { color: #00ff00; font-weight: bold; }
-        .status-off { color: #ff4444; font-weight: bold; }
-    </style>
-</head>
-<body>
-
-<div id="debug-bar">
-    <span>PID: <span id="disp-pid"></span></span>
-    <span>Status: <span id="disp-screen">--</span></span>
-    <button onclick="finishSession()" style="margin-left:auto; cursor:pointer;">💾 Save CSV</button>
-</div>
-
-<div id="app-viewport">
-    <div id="stage">
-        <div id="game-area" style="display:none; width:100%; height:100%; background:#ffffff; position:relative;">
-            <div id="game-instr">Stare at the Red Fish... catch it when it's BLUE!</div>
-            <div id="countdown-overlay">3</div>
-            <div id="boss-fish">🦑</div>
-            
-            <div id="victory-modal">
-                <div style="font-size: 100px;">🏆</div>
-                <h2 style="color: #b8860b;">GREAT JOB!</h2>
-                <p style="font-size: 24px;">Fishes Caught: <b id="final-fish-display">--</b></p>
-                <button onclick="closeVictory()" style="padding: 15px 40px; background: #ffd700; border: none; border-radius: 20px; font-weight: bold; cursor: pointer;">WATCH BIRDS 🐦</button>
-            </div>
-        </div>
-        <div id="video-area" style="display:none;"><div id="player"></div></div>
-    </div>
-
-    <div id="overlay">
-        <h1 style="color:#0077be; font-size: 3rem; margin-bottom: 20px;">🌊 Deep Sea Discovery</h1>
-        <button onclick="initExperience()" style="padding:25px 80px; font-size:2rem; cursor:pointer; background:#0077be; color:white; border:none; border-radius:60px; font-weight:bold;">START</button>
-    </div>
-</div>
-
 <script>
-    const params = new URLSearchParams(window.location.search);
-    const PID = params.get("pid") || "P001";
-    const YT_ID = params.get("yt") || "905QNpTukIU";
-    document.getElementById('disp-pid').innerText = PID;
-
-    let csvData = [["timestamp", "event", "video_time", "norm_x", "norm_y", "on_screen", "accuracy_score"]];
-    let currentGaze = { x: 0, y: 0 };
-    let player = null;
-    let isRecording = false;
-    let finalAccuracy = 0;
-    let isBonusRound = false;
-
-    const points = [[15,15],[85,15],[50,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
-    const bonusPoints = [[12,12], [88,12], [12,88], [88,88]];
-    let currentPointIndex = 0;
-    let clickCount = 0;
-    let canClick = false;
-
-    const tag = document.createElement('script');
-    tag.src = "https://www.youtube.com/iframe_api";
-    document.head.appendChild(tag);
-    window.onYouTubeIframeAPIReady = () => {
-        player = new YT.Player('player', { videoId: YT_ID, width: '100%', height: '100%', playerVars: { controls: 0, disablekb: 1, rel: 0 } });
-    };
-
-    async function initExperience() {
-        document.getElementById('overlay').style.display = 'none';
-        
-        await webgazer.clearData(); 
-
-        await webgazer.setRegression('ridge')
-            .setTracker('clmtrackr') 
-            .setGazeListener((data) => {
-                if (data) { 
-                    currentGaze = { x: data.x, y: data.y }; 
-                }
-                updateOnScreenStatus();
-            }).begin();
-        
-        // FORCE DOT VISIBILITY AND LAYER
-        webgazer.showVideo(true).showPredictionPoints(true);
-        const forceDot = setInterval(() => {
-            const dot = document.getElementById('webgazerGazeDot');
-            if (dot) {
-                dot.style.display = 'block';
-                dot.style.zIndex = "2147483647";
-                clearInterval(forceDot);
-            }
-        }, 100);
-
-        document.getElementById('game-area').style.display = 'block';
-        spawnPoint();
-    }
-
-    function spawnPoint() {
-        const area = document.getElementById('game-area');
-        area.querySelectorAll('.fish-target').forEach(el => el.remove());
-        const activePoints = isBonusRound ? bonusPoints : points;
-        
-        if (currentPointIndex >= activePoints.length) {
-            if (!isBonusRound) triggerCountdown();
-            else showVictoryPopup();
-            return;
-        }
-
-        const [x, y] = activePoints[currentPointIndex];
-        const t = document.createElement('div'); 
-        t.className = 'fish-target fish-red'; 
-        t.innerHTML = '🐠';
-        t.style.left = x + "%"; t.style.top = y + "%";
-        canClick = false;
-
-        setTimeout(() => {
-            t.classList.remove('fish-red');
-            t.classList.add('fish-blue');
-            canClick = true;
-        }, 1200);
-
-        t.onclick = () => {
-            if (!canClick) return;
-            clickCount++;
-            if (clickCount >= 3) { 
-                clickCount = 0; currentPointIndex++; spawnPoint(); 
-            } else { 
-                t.style.transform = `translate(-50%, -50%) scale(${1 + clickCount * 0.3})`; 
-            }
-        };
-        area.appendChild(t);
-    }
+    // ... (Keep same Init/Spawn logic) ...
 
     function triggerCountdown() {
         const cdOverlay = document.getElementById('countdown-overlay');
+        document.getElementById('game-instr').innerHTML = "<b>Get ready for the Boss!</b>";
         cdOverlay.style.display = 'flex';
+        
         let count = 3;
         const timer = setInterval(() => {
             count--;
-            if (count > 0) cdOverlay.innerText = count;
-            else if (count === 0) cdOverlay.innerText = "STARE!";
-            else { clearInterval(timer); cdOverlay.style.display = 'none'; startBossBattle(); }
+            if (count > 0) {
+                cdOverlay.innerText = count;
+            } else if (count === 0) {
+                cdOverlay.innerText = "STARE!"; // Positioned at center
+            } else {
+                clearInterval(timer);
+                cdOverlay.style.display = 'none';
+                startBossBattle();
+            }
         }, 1000);
     }
 
     function startBossBattle() {
         const boss = document.getElementById('boss-fish');
+        document.getElementById('game-instr').innerHTML = "<b>DON'T LOOK AWAY!</b>";
         boss.classList.add('boss-active');
+        
         let samples = [];
         const stageBox = document.getElementById('stage').getBoundingClientRect();
         const targetX = stageBox.left + (stageBox.width / 2);
         const targetY = stageBox.top + (stageBox.height / 2);
 
+        // Added a 500ms delay to let eyes settle before sampling starts
         setTimeout(() => {
             const checkInterval = setInterval(() => {
-                if (currentGaze && currentGaze.x !== 0) {
-                    const dist = Math.sqrt(Math.pow(currentGaze.x - targetX, 2) + Math.pow(currentGaze.y - targetY, 2));
-                    samples.push(dist);
-                }
+                const dist = Math.sqrt(Math.pow(currentGaze.x - targetX, 2) + Math.pow(currentGaze.y - targetY, 2));
+                samples.push(dist);
             }, 100);
 
             setTimeout(() => {
                 clearInterval(checkInterval);
-                if (samples.length === 0) {
-                    finalAccuracy = 0;
-                } else {
-                    const avgDist = samples.reduce((a, b) => a + b, 0) / samples.length;
-                    finalAccuracy = Math.max(0, Math.min(100, 100 - (avgDist / 4.5))); 
-                }
-
+                const avgDist = samples.reduce((a, b) => a + b, 0) / samples.length;
+                
+                // Keep the 4.5 coefficient but apply it to the settled samples
+                finalAccuracy = Math.max(0, Math.min(100, 100 - (avgDist / 4.5))); 
                 boss.classList.remove('boss-active');
+
                 if (finalAccuracy < 70 && !isBonusRound) {
-                    isBonusRound = true; currentPointIndex = 0;
-                    document.getElementById('game-instr').innerHTML = "<b>🌟 BONUS ROUND! Stare closer! 🌟</b>";
+                    isBonusRound = true;
+                    currentPointIndex = 0;
+                    document.getElementById('game-instr').innerHTML = "<b>🌟 BONUS ROUND! Catch 4 more! 🌟</b>";
                     spawnPoint();
-                } else { showVictoryPopup(); }
+                } else {
+                    showVictoryPopup();
+                }
             }, 4000);
-        }, 500);
+        }, 500); 
     }
-
-    function showVictoryPopup() {
-        document.getElementById('game-instr').style.display = 'none';
-        document.getElementById('final-fish-display').innerText = Math.round(finalAccuracy);
-        document.getElementById('victory-modal').style.display = 'block';
-    }
-
-    function closeVictory() {
-        document.getElementById('game-area').style.display = 'none';
-        document.getElementById('video-area').style.display = 'block';
-        webgazer.showPredictionPoints(false); 
-        player.playVideo();
-        isRecording = true;
-        setInterval(logData, 1000);
-    }
-
-    function logData() {
-        if (!isRecording) return;
-        const stageBox = document.getElementById('stage').getBoundingClientRect();
-        const normX = (currentGaze.x - stageBox.left) / stageBox.width;
-        const normY = (currentGaze.y - stageBox.top) / stageBox.height;
-        
-        const faceData = webgazer.tracker.getTrackingStats();
-        const faceVisible = (faceData && faceData.length > 0) ? 1 : 0;
-
-        csvData.push([new Date().toISOString(), "video", player.getCurrentTime().toFixed(2), normX.toFixed(4), normY.toFixed(4), faceVisible, finalAccuracy.toFixed(1)]);
-    }
-
-    function updateOnScreenStatus() {
-        const screenSpan = document.getElementById('disp-screen');
-        if (!screenSpan) return;
-
-        const isGazeInWindow = (currentGaze.x >= 0 && currentGaze.x <= window.innerWidth && 
-                                currentGaze.y >= 0 && currentGaze.y <= window.innerHeight);
-        
-        const faceData = webgazer.tracker.getTrackingStats();
-        const isFaceDetected = (faceData && faceData.length > 0);
-
-        if (isGazeInWindow && isFaceDetected) {
-            screenSpan.innerText = "IN";
-            screenSpan.className = "status-on";
-        } else {
-            screenSpan.innerText = "OUT";
-            screenSpan.className = "status-off";
-        }
-    }
-
-    function finishSession() {
-        isRecording = false;
-        webgazer.pause();
-        const csvContent = csvData.map(e => e.join(",")).join("\n");
-        const blob = new Blob([csvContent], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = `BIRDS_${PID}.csv`; a.click();
-    }
+    // ... (Keep rest of script same) ...
 </script>
-</body>
-</html>
