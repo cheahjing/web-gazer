@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Bird Study: Precision Restored</title>
+    <title>Bird Study: Steady Tracking</title>
     <script src="https://cdn.jsdelivr.net/npm/webgazer@2.1.1/dist/webgazer.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #f8fbff; font-family: 'Comic Sans MS', cursive, sans-serif; overflow: hidden; }
@@ -18,11 +18,12 @@
             z-index: 10; overflow: hidden; 
         }
 
-        /* Webgazer Gaze Dot - Forced Visibility */
+        /* Force Red Dot to stay steady and on top */
         #webgazerGazeDot {
             z-index: 2147483647 !important;
             display: block !important;
-            border-radius: 50% !important;
+            border: 2px solid white !important;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
         }
 
         #webgazerVideoFeed { 
@@ -43,7 +44,6 @@
         .fish-red { filter: grayscale(1) sepia(1) saturate(10) hue-rotate(-50deg); cursor: default; }
         .fish-blue { filter: none; cursor: pointer; }
 
-        /* The Sea Monster (Squid) - 50% Smaller than original */
         #boss-fish { 
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
             font-size: 100px; z-index: 2000; display: none; opacity: 0; pointer-events: none;
@@ -60,7 +60,6 @@
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: white; border: 10px solid #ffd700; border-radius: 30px;
             padding: 40px; text-align: center; z-index: 3000; display: none;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
 
         #overlay { 
@@ -88,14 +87,14 @@
 <div id="app-viewport">
     <div id="stage">
         <div id="game-area" style="display:none; width:100%; height:100%; background:#ffffff; position:relative;">
-            <div id="game-instr">Stare at the Red Fish... catch it when it turns BLUE!</div>
+            <div id="game-instr">Stare at the Red Fish... catch it when it's BLUE!</div>
             <div id="countdown-overlay">3</div>
             <div id="boss-fish">🦑</div>
             
             <div id="victory-modal">
                 <div style="font-size: 100px;">🏆</div>
-                <h2 style="color: #b8860b;">AWESOME!</h2>
-                <p style="font-size: 24px;">Calibration: <b id="final-fish-display">--</b>%</p>
+                <h2 style="color: #b8860b;">GREAT JOB!</h2>
+                <p style="font-size: 24px;">Accuracy: <b id="final-fish-display">--</b>%</p>
                 <button onclick="closeVictory()" style="padding: 15px 40px; background: #ffd700; border: none; border-radius: 20px; font-weight: bold; cursor: pointer;">WATCH BIRDS 🐦</button>
             </div>
         </div>
@@ -137,7 +136,11 @@
     async function initExperience() {
         document.getElementById('overlay').style.display = 'none';
         
-        await webgazer.setRegression('ridge')
+        // 1. CLEAR OLD DATA TO REMOVE ZOOMING JITTER
+        await webgazer.clearData(); 
+
+        // 2. USE THREADED RIDGE FOR SMOOTHER TRACKING
+        await webgazer.setRegression('threadedridge') 
             .setGazeListener((data) => {
                 if (data) { 
                     currentGaze = { x: data.x, y: data.y }; 
@@ -147,15 +150,6 @@
             
         webgazer.showVideo(true).showPredictionPoints(true);
         
-        // Dot Persistence Loop
-        setInterval(() => {
-            const dot = document.getElementById('webgazerGazeDot');
-            if (dot) {
-                dot.style.display = 'block';
-                dot.style.zIndex = "2147483647";
-            }
-        }, 100);
-
         document.getElementById('game-area').style.display = 'block';
         spawnPoint();
     }
@@ -175,8 +169,7 @@
         const t = document.createElement('div'); 
         t.className = 'fish-target fish-red'; 
         t.innerHTML = '🐠';
-        t.style.left = x + "%"; 
-        t.style.top = y + "%";
+        t.style.left = x + "%"; t.style.top = y + "%";
         canClick = false;
 
         setTimeout(() => {
@@ -189,9 +182,7 @@
             if (!canClick) return;
             clickCount++;
             if (clickCount >= 3) { 
-                clickCount = 0; 
-                currentPointIndex++; 
-                spawnPoint(); 
+                clickCount = 0; currentPointIndex++; spawnPoint(); 
             } else { 
                 t.style.transform = `translate(-50%, -50%) scale(${1 + clickCount * 0.3})`; 
             }
@@ -214,7 +205,6 @@
     function startBossBattle() {
         const boss = document.getElementById('boss-fish');
         boss.classList.add('boss-active');
-        
         let samples = [];
         const stageBox = document.getElementById('stage').getBoundingClientRect();
         const targetX = stageBox.left + (stageBox.width / 2);
@@ -231,10 +221,9 @@
                 const avgDist = samples.reduce((a, b) => a + b, 0) / samples.length;
                 finalAccuracy = Math.max(0, Math.min(100, 100 - (avgDist / 4.5))); 
                 boss.classList.remove('boss-active');
-
                 if (finalAccuracy < 70 && !isBonusRound) {
                     isBonusRound = true; currentPointIndex = 0;
-                    document.getElementById('game-instr').innerHTML = "<b>🌟 BONUS ROUND! Focus on the fish! 🌟</b>";
+                    document.getElementById('game-instr').innerHTML = "<b>🌟 BONUS ROUND! 🌟</b>";
                     spawnPoint();
                 } else { showVictoryPopup(); }
             }, 4000);
