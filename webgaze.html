@@ -2,251 +2,197 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Bird Study: Clean Final</title>
+    <title>Bird Study: Research Grade Logger</title>
     <script src="https://cdn.jsdelivr.net/npm/webgazer@2.1.1/dist/webgazer.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #f8fbff; font-family: 'Comic Sans MS', cursive, sans-serif; overflow: hidden; }
         #app-viewport { position: relative; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
-        
-        #stage { 
-            position: relative; width: 85%; height: 80%; 
-            background: #ffffff; border: 8px solid #0077be; border-radius: 25px; 
-            z-index: 10; overflow: hidden; 
-        }
-
-        /* Red Dot - Kept for calibration feedback */
+        #stage { position: relative; width: 85%; height: 80%; background: #ffffff; border: 8px solid #0077be; border-radius: 25px; z-index: 10; overflow: hidden; }
         #webgazerGazeDot { z-index: 2147483647 !important; border: 2px solid white !important; }
-
-        /* The Fish: Cleaned of all boxes/outlines */
-        .fish-target { 
-            position: absolute; display: flex !important; align-items: center; 
-            justify-content: center; width: 120px; height: 120px; 
-            transform: translate(-50%, -50%); font-size: 70px; 
-            z-index: 1000; transition: filter 0.2s, transform 0.2s;
-            cursor: default;
-            background: transparent !important; /* No background box */
-            outline: none !important;          /* No focus square */
-            user-select: none;
-            -webkit-tap-highlight-color: transparent; /* Removes mobile blue flash */
-        }
-
+        .fish-target { position: absolute; display: flex !important; align-items: center; justify-content: center; width: 120px; height: 120px; transform: translate(-50%, -50%); font-size: 70px; z-index: 1000; transition: filter 0.2s, transform 0.2s; cursor: default; background: transparent !important; outline: none !important; user-select: none; }
         .fish-red { filter: grayscale(1) sepia(1) saturate(8) hue-rotate(-50deg); opacity: 0.7; }
         .fish-blue { filter: none; opacity: 1; cursor: pointer; }
-
-        #boss-fish { 
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            font-size: 140px; z-index: 1200; display: none; opacity: 0; pointer-events: none;
-        }
+        #boss-fish { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 140px; z-index: 1200; display: none; opacity: 0; pointer-events: none; }
         .boss-active { display: flex !important; opacity: 1 !important; }
-
-        #countdown-overlay {
-            position: absolute; inset: 0; display: none; align-items: center; 
-            justify-content: center; background: rgba(255,255,255,0.8);
-            z-index: 1500; font-size: 150px; color: #ff4444; font-weight: bold;
-        }
-
-        #victory-modal {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: white; border: 10px solid #ffd700; border-radius: 30px;
-            padding: 40px; text-align: center; z-index: 2000; display: none;
-        }
-
+        #countdown-overlay { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(255,255,255,0.8); z-index: 1500; font-size: 150px; color: #ff4444; font-weight: bold; }
+        #victory-modal { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border: 10px solid #ffd700; border-radius: 30px; padding: 40px; text-align: center; z-index: 2000; display: none; }
         #video-area, #player { width: 100%; height: 100%; }
-        #game-instr { position: absolute; top: 15px; width: 100%; text-align: center; font-size: 24px; color: #0077be; z-index: 1100; font-weight: bold; }
-        #debug-bar { position: fixed; top: 0; width: 100%; background: #333; color: white; padding: 10px 20px; z-index: 2147483646; display: flex; gap: 30px; font-family: monospace;}
-        .status-on { color: #00ff00; font-weight: bold; }
-        .status-off { color: #ff4444; font-weight: bold; }
+        #debug-bar { position: fixed; top: 0; width: 100%; background: #333; color: white; padding: 10px 20px; z-index: 2147483646; display: flex; gap: 20px; font-family: monospace; font-size: 12px;}
         #overlay { position: fixed; inset: 0; background: #ffffff; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2147483645; text-align: center; }
+        #camVideo { display: none; }
     </style>
 </head>
 <body>
 
 <div id="debug-bar">
-    <span>PID: <span id="disp-pid"></span></span>
-    <span>Gaze: <span id="disp-screen">--</span></span>
-    <button onclick="finishSession()" style="margin-left:auto; cursor:pointer;">💾 Save CSV</button>
+    <span>PID: <b id="disp-pid">--</b></span>
+    <span>VID: <b id="disp-vid">--</b></span>
+    <span>SESS: <b id="disp-sess">--</b></span>
+    <button onclick="terminateSession()" style="margin-left:auto; cursor:pointer; background:#ff4444; color:white; border:none; padding:2px 10px; border-radius:4px;">⏹ Stop & Save</button>
 </div>
 
 <div id="app-viewport">
     <div id="stage">
         <div id="game-area" style="display:none; width:100%; height:100%; background:#ffffff; position:relative;">
-            <div id="game-instr">Wait for Blue... then catch it!</div>
             <div id="countdown-overlay">3</div>
             <div id="boss-fish">🦑</div>
-            
             <div id="victory-modal">
                 <div style="font-size: 100px;">🏆</div>
-                <h2 style="color: #b8860b;">GREAT JOB!</h2>
-                <p style="font-size: 24px;">Quality Score: <b id="final-fish-display">--</b>%</p>
+                <h2>CALIBRATION COMPLETE</h2>
+                <p>Quality Score: <b id="final-fish-display">--</b>%</p>
                 <button onclick="closeVictory()" style="padding: 15px 40px; background: #ffd700; border: none; border-radius: 20px; font-weight: bold; cursor: pointer;">WATCH BIRDS 🐦</button>
             </div>
         </div>
         <div id="video-area" style="display:none;"><div id="player"></div></div>
     </div>
-
     <div id="overlay">
-        <h1 style="color:#0077be;">🌊 Deep Sea Discovery</h1>
-        <p>Catch the blue fish to find the Sea Monster!</p>
-        <button onclick="initExperience()" style="padding:20px 60px; font-size:1.5rem; cursor:pointer; background:#0077be; color:white; border:none; border-radius:50px; font-weight:bold;">START ADVENTURE</button>
+        <h1>🌊 Research Session</h1>
+        <p id="init-msg">Initializing Trackers...</p>
+        <button id="startBtn" onclick="initExperience()" style="display:none; padding:20px 60px; font-size:1.5rem; cursor:pointer; background:#0077be; color:white; border:none; border-radius:50px; font-weight:bold;">START</button>
     </div>
 </div>
 
-<script>
+<video id="camVideo" autoplay playsinline muted></video>
+
+<script type="module">
+    import { FaceDetector, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
+
+    // --- SESSION ID GENERATOR ---
+    function generateSessionId() {
+        const now = new Date();
+        const YYYY = now.getFullYear();
+        const MM = String(now.getMonth() + 1).padStart(2, "0");
+        const DD = String(now.getDate()).padStart(2, "0");
+        const HH = String(now.getHours()).padStart(2, "0");
+        const mm = String(now.getMinutes()).padStart(2, "0");
+        const SS = String(now.getSeconds()).padStart(2, "0");
+        const randomSuffix = String(Math.floor(Math.random() * 100)).padStart(2, "0");
+        return `sess_${YYYY}${MM}${DD}_${HH}${mm}${SS}_${randomSuffix}`;
+    }
+
     const params = new URLSearchParams(window.location.search);
     const PID = params.get("pid") || "P001";
+    const VID = params.get("vid") || "V01";
     const YT_ID = params.get("yt") || "905QNpTukIU";
-    document.getElementById('disp-pid').innerText = PID;
+    const SESSION_ID = generateSessionId();
 
-    let csvData = [["timestamp", "event", "video_time", "norm_x", "norm_y", "on_screen", "accuracy_score"]];
+    document.getElementById('disp-pid').innerText = PID;
+    document.getElementById('disp-vid').innerText = VID;
+    document.getElementById('disp-sess').innerText = SESSION_ID;
+
+    let csvData = [["timestamp", "session_id", "participant_id", "video_id", "youtube_id", "video_time", "gaze_x", "gaze_y", "on_screen", "face_detected", "face_centered", "face_count", "face_width", "face_height", "detection_confidence", "head_symmetry"]];
     let currentGaze = { x: 0, y: 0 };
+    let faceState = { detected: 0, centered: 0, count: 0, width: 0, height: 0, confidence: 0, symmetry: 0 };
     let player = null;
     let isRecording = false;
-    let finalAccuracy = 0;
-    let isBonusRound = false;
-
-    const points = [[15,15],[85,15],[50,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
-    const bonusPoints = [[12,12], [88,12], [12,88], [88,88]];
+    let faceDetector = null;
     let currentPointIndex = 0;
     let clickCount = 0;
     let canClick = false;
 
-    window.onYouTubeIframeAPIReady = () => {
-        player = new YT.Player('player', { videoId: YT_ID, width: '100%', height: '100%', playerVars: { controls: 0, disablekb: 1, rel: 0 } });
-    };
+    async function initFace() {
+        const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
+        faceDetector = await FaceDetector.createFromOptions(vision, {
+            baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite" },
+            runningMode: "VIDEO", minDetectionConfidence: 0.5
+        });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        document.getElementById('camVideo').srcObject = stream;
+        document.getElementById('init-msg').innerText = "Ready.";
+        document.getElementById('startBtn').style.display = "block";
+        startFaceLoop();
+    }
 
-    async function initExperience() {
+    function startFaceLoop() {
+        const video = document.getElementById('camVideo');
+        function detect() {
+            if (video.readyState >= 2) {
+                const result = faceDetector.detectForVideo(video, performance.now());
+                const detections = result.detections || [];
+                if (detections.length > 0) {
+                    const d = detections[0];
+                    let sym = 1.0;
+                    if (d.keypoints && d.keypoints.length >= 3) {
+                        const distR = Math.hypot(d.keypoints[2].x - d.keypoints[0].x, d.keypoints[2].y - d.keypoints[0].y);
+                        const distL = Math.hypot(d.keypoints[2].x - d.keypoints[1].x, d.keypoints[2].y - d.keypoints[1].y);
+                        sym = Math.min(distL, distR) / Math.max(distL, distR);
+                    }
+                    faceState = { detected: 1, count: detections.length, width: Math.round(d.boundingBox.width), height: Math.round(d.boundingBox.height), confidence: d.categories[0].score.toFixed(3), symmetry: sym.toFixed(3), centered: (d.keypoints[2].x > 0.3 && d.keypoints[2].x < 0.7) ? 1 : 0 };
+                } else {
+                    faceState = { detected: 0, centered: 0, count: 0, width: 0, height: 0, confidence: 0, symmetry: 0 };
+                }
+            }
+            requestAnimationFrame(detect);
+        }
+        detect();
+    }
+
+    window.initExperience = async function() {
         document.getElementById('overlay').style.display = 'none';
-        await webgazer.setRegression('ridge').setGazeListener((data) => {
-            if (data) { currentGaze = { x: data.x, y: data.y }; updateOnScreenStatus(); }
-        }).begin();
-        
-        // CAMERA OFF - Still tracking, just not showing the feed
+        await webgazer.setRegression('ridge').setGazeListener((data) => { if (data) currentGaze = { x: data.x, y: data.y }; }).begin();
         webgazer.showVideo(false).showPredictionPoints(true);
-        
         document.getElementById('game-area').style.display = 'block';
         spawnPoint();
-    }
+    };
 
     function spawnPoint() {
         const area = document.getElementById('game-area');
         area.querySelectorAll('.fish-target').forEach(el => el.remove());
-        const activePoints = isBonusRound ? bonusPoints : points;
-        
-        if (currentPointIndex >= activePoints.length) {
-            if (!isBonusRound) triggerCountdown();
-            else showVictoryPopup();
-            return;
-        }
-
-        const [x, y] = activePoints[currentPointIndex];
-        const t = document.createElement('div'); 
-        t.className = 'fish-target fish-red'; 
-        t.innerHTML = '🐠';
-        t.style.left = x + "%"; 
-        t.style.top = y + "%";
-        
-        canClick = false;
-
-        setTimeout(() => {
-            t.classList.remove('fish-red');
-            t.classList.add('fish-blue');
-            canClick = true;
-        }, 600);
-
-        t.onclick = (e) => {
-            if (!canClick) return;
-            clickCount++;
-            if (clickCount >= 3) { 
-                clickCount = 0; 
-                currentPointIndex++; 
-                spawnPoint(); 
-            } else { 
-                t.style.transform = `translate(-50%, -50%) scale(${1 + clickCount * 0.3})`; 
-            }
-        };
+        const pts = [[15,15],[85,15],[50,50],[15,85],[85,85]];
+        if (currentPointIndex >= pts.length) { triggerCountdown(); return; }
+        const [x, y] = pts[currentPointIndex];
+        const t = document.createElement('div');
+        t.className = 'fish-target fish-red'; t.innerHTML = '🐠';
+        t.style.left = x + "%"; t.style.top = y + "%";
+        setTimeout(() => { t.classList.remove('fish-red'); t.classList.add('fish-blue'); canClick = true; }, 600);
+        t.onclick = () => { if (canClick) { clickCount++; if (clickCount >= 3) { clickCount = 0; currentPointIndex++; canClick = false; spawnPoint(); } } };
         area.appendChild(t);
     }
 
     function triggerCountdown() {
-        const cdOverlay = document.getElementById('countdown-overlay');
-        document.getElementById('game-instr').innerHTML = "<b>Get ready to STARE!</b>";
-        cdOverlay.style.display = 'flex';
-        let count = 3;
-        const timer = setInterval(() => {
-            count--;
-            if (count > 0) cdOverlay.innerText = count;
-            else if (count === 0) cdOverlay.innerText = "STARE!";
-            else { clearInterval(timer); cdOverlay.style.display = 'none'; startBossBattle(); }
-        }, 1000);
+        const cd = document.getElementById('countdown-overlay'); cd.style.display = 'flex';
+        let c = 3;
+        const itv = setInterval(() => { c--; cd.innerText = c > 0 ? c : "STARE!"; if (c < 0) { clearInterval(itv); cd.style.display = 'none'; startBoss(); } }, 1000);
     }
 
-    function startBossBattle() {
-        const boss = document.getElementById('boss-fish');
-        document.getElementById('game-instr').innerHTML = "<b>LOOK AT THE SQUID!</b>";
-        boss.classList.add('boss-active');
-        let samples = [];
-        const stageBox = document.getElementById('stage').getBoundingClientRect();
-        const targetX = stageBox.left + (stageBox.width / 2);
-        const targetY = stageBox.top + (stageBox.height / 2);
-
-        const checkInterval = setInterval(() => {
-            const dist = Math.sqrt(Math.pow(currentGaze.x - targetX, 2) + Math.pow(currentGaze.y - targetY, 2));
-            samples.push(dist);
-        }, 100);
-
-        setTimeout(() => {
-            clearInterval(checkInterval);
-            const avgDist = samples.reduce((a, b) => a + b, 0) / samples.length;
-            finalAccuracy = Math.max(0, Math.min(100, 100 - (avgDist / 4.5))); 
-            boss.classList.remove('boss-active');
-            if (finalAccuracy < 70 && !isBonusRound) {
-                isBonusRound = true; currentPointIndex = 0;
-                document.getElementById('game-instr').innerHTML = "<b>🌟 BONUS ROUND! 🌟</b>";
-                spawnPoint();
-            } else { showVictoryPopup(); }
-        }, 4000);
+    function startBoss() {
+        document.getElementById('boss-fish').classList.add('boss-active');
+        setTimeout(() => { document.getElementById('boss-fish').classList.remove('boss-active'); document.getElementById('final-fish-display').innerText = "CALIBRATED"; document.getElementById('victory-modal').style.display = 'block'; }, 3000);
     }
 
-    function showVictoryPopup() {
-        document.getElementById('game-instr').style.display = 'none';
-        document.getElementById('final-fish-display').innerText = Math.round(finalAccuracy);
-        document.getElementById('victory-modal').style.display = 'block';
-    }
-
-    function closeVictory() {
+    window.closeVictory = function() {
         document.getElementById('game-area').style.display = 'none';
         document.getElementById('video-area').style.display = 'block';
-        webgazer.showPredictionPoints(false); 
+        webgazer.showPredictionPoints(false);
         player.playVideo();
         isRecording = true;
-        setInterval(logData, 1000);
-    }
+        setInterval(logRow, 1000);
+    };
 
-    function logData() {
+    function logRow() {
         if (!isRecording) return;
-        const stageBox = document.getElementById('stage').getBoundingClientRect();
-        const normX = (currentGaze.x - stageBox.left) / stageBox.width;
-        const normY = (currentGaze.y - stageBox.top) / stageBox.height;
-        csvData.push([new Date().toISOString(), "video", player.getCurrentTime().toFixed(2), normX.toFixed(4), normY.toFixed(4), (normX >= 0 && normX <= 1 ? 1 : 0), finalAccuracy.toFixed(1)]);
+        const stage = document.getElementById('stage').getBoundingClientRect();
+        const nx = (currentGaze.x - stage.left) / stage.width;
+        const ny = (currentGaze.y - stage.top) / stage.height;
+        csvData.push([new Date().toISOString(), SESSION_ID, PID, VID, YT_ID, player.getCurrentTime().toFixed(3), nx.toFixed(4), ny.toFixed(4), (nx >= 0 && nx <= 1 ? 1 : 0), faceState.detected, faceState.centered, faceState.count, faceState.width, faceState.height, faceState.confidence, faceState.symmetry]);
     }
 
-    function updateOnScreenStatus() {
-        const onScreen = (currentGaze.x >= 0 && currentGaze.x <= window.innerWidth && currentGaze.y >= 0 && currentGaze.y <= window.innerHeight);
-        const screenSpan = document.getElementById('disp-screen');
-        if (screenSpan) {
-            screenSpan.innerText = onScreen ? "IN" : "OUT";
-            screenSpan.className = onScreen ? "status-on" : "status-off";
-        }
-    }
-
-    function finishSession() {
+    window.terminateSession = function() {
         isRecording = false;
         webgazer.pause();
         const csvContent = csvData.map(e => e.join(",")).join("\n");
         const blob = new Blob([csvContent], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = `BIRDS_${PID}.csv`; a.click();
-    }
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `${PID}_${VID}_${SESSION_ID}.csv`;
+        link.click();
+    };
+
+    window.onYouTubeIframeAPIReady = () => {
+        player = new YT.Player('player', { videoId: YT_ID, playerVars: { controls: 0 }, events: { onStateChange: (e) => { if(e.data === 0) terminateSession(); } } });
+    };
+
+    initFace();
 </script>
 <script src="https://www.youtube.com/iframe_api"></script>
 </body>
