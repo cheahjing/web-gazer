@@ -59,8 +59,13 @@
 <video id="camVideo" autoplay playsinline muted></video>
 
 <script type="module">
-    import { FaceDetector, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
+    // --- PULLING IN YOUR EXACT WORKING IMPORTS ---
+    import {
+        FaceDetector,
+        FilesetResolver
+    } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
 
+    // --- SESSION ID GENERATOR ---
     function generateSessionId() {
         const now = new Date();
         const YYYY = now.getFullYear();
@@ -89,44 +94,77 @@
     const points = [[15,15],[85,15],[50,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
     const bonusPoints = [[12,12], [88,12], [12,88], [88,88]];
 
-    async function initTrackers() {
+    // --- PULLING IN YOUR EXACT WORKING INIT LOGIC ---
+    async function init() {
         try {
-            const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
-            faceDetector = await FaceDetector.createFromOptions(vision, {
-                baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite" },
-                runningMode: "VIDEO", minDetectionConfidence: 0.5
+            const filesetResolver = await FilesetResolver.forVisionTasks(
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
+            );
+            faceDetector = await FaceDetector.createFromOptions(filesetResolver, {
+                baseOptions: {
+                    modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite"
+                },
+                runningMode: "VIDEO",
+                minDetectionConfidence: 0.5
             });
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            document.getElementById('camVideo').srcObject = stream;
+            
+            // Start Camera
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+            const camVideo = document.getElementById("camVideo");
+            camVideo.srcObject = stream;
+            await camVideo.play();
+            
             document.getElementById('init-msg').innerText = "Trackers Ready.";
             document.getElementById('startBtn').style.display = "block";
             startFaceLoop();
-        } catch (e) { document.getElementById('init-msg').innerText = "Error: Camera Access Denied."; }
+        } catch (err) {
+            document.getElementById('init-msg').innerText = "❌ Init failed: " + err.message;
+        }
     }
 
     function startFaceLoop() {
         const video = document.getElementById('camVideo');
         function detect() {
             if (video.readyState >= 2) {
-                const result = faceDetector.detectForVideo(video, performance.now());
-                const detections = result.detections || [];
+                const timestamp = performance.now();
+                const result = faceDetector.detectForVideo(video, timestamp);
+                const detections = result?.detections || [];
+                
                 if (detections.length > 0) {
                     const d = detections[0];
-                    let sym = 1.0;
+                    const box = d.boundingBox;
+                    const score = d.categories[0].score;
+                    
+                    // Symmetry logic from your reference
+                    let symmetry = 1.0;
                     if (d.keypoints && d.keypoints.length >= 3) {
                         const distR = Math.hypot(d.keypoints[2].x - d.keypoints[0].x, d.keypoints[2].y - d.keypoints[0].y);
                         const distL = Math.hypot(d.keypoints[2].x - d.keypoints[1].x, d.keypoints[2].y - d.keypoints[1].y);
-                        sym = Math.min(distL, distR) / Math.max(distL, distR);
+                        symmetry = Math.min(distL, distR) / Math.max(distL, distR);
                     }
-                    faceState = { detected: 1, count: detections.length, width: Math.round(d.boundingBox.width), height: Math.round(d.boundingBox.height), confidence: d.categories[0].score.toFixed(3), symmetry: sym.toFixed(3), centered: (d.keypoints[2].x > 0.3 && d.keypoints[2].x < 0.7) ? 1 : 0 };
-                    document.getElementById('dbgFace').innerText = "YES"; document.getElementById('dbgSym').innerText = faceState.symmetry;
-                } else { faceState.detected = 0; document.getElementById('dbgFace').innerText = "NO"; }
+
+                    faceState = { 
+                        detected: 1, 
+                        count: detections.length, 
+                        width: Math.round(box.width), 
+                        height: Math.round(box.height), 
+                        confidence: score.toFixed(3), 
+                        symmetry: symmetry.toFixed(3), 
+                        centered: (d.keypoints[2].x > 0.3 && d.keypoints[2].x < 0.7) ? 1 : 0 
+                    };
+                    document.getElementById('dbgFace').innerText = "YES"; 
+                    document.getElementById('dbgSym').innerText = faceState.symmetry;
+                } else { 
+                    faceState.detected = 0; 
+                    document.getElementById('dbgFace').innerText = "NO"; 
+                }
             }
             requestAnimationFrame(detect);
         }
         detect();
     }
 
+    // --- GAZE & GAME FLOW ---
     window.initExperience = async function() {
         document.getElementById('overlay').style.display = 'none';
         await webgazer.setRegression('ridge').setGazeListener((data) => {
@@ -247,7 +285,8 @@
         player = new YT.Player('player', { videoId: YT_ID, playerVars: { controls: 0, disablekb: 1, rel: 0 }, events: { onStateChange: (e) => { if(e.data === 0) terminateSession(); } } });
     };
 
-    initTrackers();
+    // Run your reference init style
+    init();
 </script>
 <script src="https://www.youtube.com/iframe_api"></script>
 </body>
