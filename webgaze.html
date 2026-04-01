@@ -8,27 +8,18 @@
         body { margin: 0; padding: 0; background-color: #f8fbff; font-family: 'Comic Sans MS', cursive, sans-serif; overflow: hidden; }
         #app-viewport { position: relative; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
         #stage { position: relative; width: 85%; height: 80%; background: #ffffff; border: 8px solid #0077be; border-radius: 25px; z-index: 10; overflow: hidden; }
-        
-        /* Red Dot */
         #webgazerGazeDot { z-index: 2147483647 !important; border: 2px solid white !important; }
-
         .fish-target { position: absolute; display: flex !important; align-items: center; justify-content: center; width: 120px; height: 120px; transform: translate(-50%, -50%); font-size: 70px; z-index: 1000; transition: filter 0.2s, transform 0.2s; cursor: default; background: transparent !important; outline: none !important; user-select: none; }
         .fish-red { filter: grayscale(1) sepia(1) saturate(8) hue-rotate(-50deg); opacity: 0.7; }
         .fish-blue { filter: none; opacity: 1; cursor: pointer; }
-        
         #boss-fish { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 140px; z-index: 1200; display: none; opacity: 0; pointer-events: none; }
         .boss-active { display: flex !important; opacity: 1 !important; }
-
         #countdown-overlay { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(255,255,255,0.8); z-index: 1500; font-size: 150px; color: #ff4444; font-weight: bold; }
         #victory-modal { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border: 10px solid #ffd700; border-radius: 30px; padding: 40px; text-align: center; z-index: 2000; display: none; box-shadow: 0 20px 50px rgba(0,0,0,0.2); }
-        
         #video-area, #player { width: 100%; height: 100%; }
         #game-instr { position: absolute; top: 15px; width: 100%; text-align: center; font-size: 24px; color: #0077be; z-index: 1100; font-weight: bold; }
-        
-        #debug-bar { position: fixed; top: 0; width: 100%; background: #333; color: white; padding: 10px 20px; z-index: 2147483646; display: flex; gap: 20px; font-family: monospace; font-size: 12px;}
-        .status-on { color: #00ff00; font-weight: bold; }
-        .status-off { color: #ff4444; font-weight: bold; }
-        
+        #debug-bar { position: fixed; top: 0; width: 100%; background: #333; color: white; padding: 10px 20px; z-index: 2147483646; display: flex; gap: 20px; font-family: monospace; font-size: 11px;}
+        .status-on { color: #00ff00; font-weight: bold; } .status-off { color: #ff4444; font-weight: bold; }
         #overlay { position: fixed; inset: 0; background: #ffffff; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2147483645; text-align: center; }
         #camVideo { display: none; }
     </style>
@@ -49,7 +40,6 @@
             <div id="game-instr">Wait for Blue... then catch it!</div>
             <div id="countdown-overlay">3</div>
             <div id="boss-fish">🦑</div>
-            
             <div id="victory-modal">
                 <div style="font-size: 100px;">🏆</div>
                 <h2>GREAT JOB!</h2>
@@ -59,7 +49,6 @@
         </div>
         <div id="video-area" style="display:none;"><div id="player"></div></div>
     </div>
-
     <div id="overlay">
         <h1>🌊 Research Session</h1>
         <p id="init-msg">Initializing Trackers...</p>
@@ -89,22 +78,17 @@
     const VID = params.get("vid") || "V01";
     const YT_ID = params.get("yt") || "905QNpTukIU";
     const SESSION_ID = generateSessionId();
-
     document.getElementById('disp-pid').innerText = PID;
 
     let csvData = [["timestamp", "session_id", "participant_id", "video_id", "youtube_id", "video_time", "gaze_x", "gaze_y", "on_screen", "face_detected", "face_centered", "face_count", "face_width", "face_height", "detection_confidence", "head_symmetry", "calibration_score"]];
     let currentGaze = { x: 0, y: 0 };
     let faceState = { detected: 0, centered: 0, count: 0, width: 0, height: 0, confidence: 0, symmetry: 0 };
-    let player = null;
-    let isRecording = false;
-    let faceDetector = null;
-    let finalAccuracy = 0;
-    
-    let currentPointIndex = 0;
-    let clickCount = 0;
-    let canClick = false;
+    let player = null, isRecording = false, faceDetector = null, finalAccuracy = 0;
+    let currentPointIndex = 0, clickCount = 0, canClick = false, isBonusRound = false;
 
-    // 1. Initialize Face Tracking
+    const points = [[15,15],[85,15],[50,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
+    const bonusPoints = [[12,12], [88,12], [12,88], [88,88]];
+
     async function initTrackers() {
         try {
             const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
@@ -117,9 +101,7 @@
             document.getElementById('init-msg').innerText = "Trackers Ready.";
             document.getElementById('startBtn').style.display = "block";
             startFaceLoop();
-        } catch (e) {
-            document.getElementById('init-msg').innerText = "Error: Camera Access Denied.";
-        }
+        } catch (e) { document.getElementById('init-msg').innerText = "Error: Camera Access Denied."; }
     }
 
     function startFaceLoop() {
@@ -137,26 +119,18 @@
                         sym = Math.min(distL, distR) / Math.max(distL, distR);
                     }
                     faceState = { detected: 1, count: detections.length, width: Math.round(d.boundingBox.width), height: Math.round(d.boundingBox.height), confidence: d.categories[0].score.toFixed(3), symmetry: sym.toFixed(3), centered: (d.keypoints[2].x > 0.3 && d.keypoints[2].x < 0.7) ? 1 : 0 };
-                    document.getElementById('dbgFace').innerText = "YES";
-                    document.getElementById('dbgSym').innerText = faceState.symmetry;
-                } else {
-                    faceState = { detected: 0, centered: 0, count: 0, width: 0, height: 0, confidence: 0, symmetry: 0 };
-                    document.getElementById('dbgFace').innerText = "NO";
-                }
+                    document.getElementById('dbgFace').innerText = "YES"; document.getElementById('dbgSym').innerText = faceState.symmetry;
+                } else { faceState.detected = 0; document.getElementById('dbgFace').innerText = "NO"; }
             }
             requestAnimationFrame(detect);
         }
         detect();
     }
 
-    // 2. Experience Flow
     window.initExperience = async function() {
         document.getElementById('overlay').style.display = 'none';
         await webgazer.setRegression('ridge').setGazeListener((data) => {
-            if (data) {
-                currentGaze = { x: data.x, y: data.y };
-                updateOnScreenStatus();
-            }
+            if (data) { currentGaze = { x: data.x, y: data.y }; updateOnScreenStatus(); }
         }).begin();
         webgazer.showVideo(false).showPredictionPoints(true);
         document.getElementById('game-area').style.display = 'block';
@@ -166,29 +140,30 @@
     function updateOnScreenStatus() {
         const onScreen = (currentGaze.x >= 0 && currentGaze.x <= window.innerWidth && currentGaze.y >= 0 && currentGaze.y <= window.innerHeight);
         const span = document.getElementById('disp-screen');
-        span.innerText = onScreen ? "IN" : "OUT";
-        span.className = onScreen ? "status-on" : "status-off";
+        span.innerText = onScreen ? "IN" : "OUT"; span.className = onScreen ? "status-on" : "status-off";
     }
 
     function spawnPoint() {
         const area = document.getElementById('game-area');
         area.querySelectorAll('.fish-target').forEach(el => el.remove());
-        const pts = [[15,15],[85,15],[50,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
+        const activePoints = isBonusRound ? bonusPoints : points;
         
-        if (currentPointIndex >= pts.length) { triggerCountdown(); return; }
+        if (currentPointIndex >= activePoints.length) {
+            if (!isBonusRound) triggerCountdown();
+            else showVictoryPopup();
+            return;
+        }
 
-        const [x, y] = pts[currentPointIndex];
+        const [x, y] = activePoints[currentPointIndex];
         const t = document.createElement('div');
         t.className = 'fish-target fish-red'; t.innerHTML = '🐠';
         t.style.left = x + "%"; t.style.top = y + "%";
-        
-        canClick = false;
         setTimeout(() => { t.classList.remove('fish-red'); t.classList.add('fish-blue'); canClick = true; }, 600);
 
         t.onclick = () => {
             if (!canClick) return;
             clickCount++;
-            if (clickCount >= 3) { clickCount = 0; currentPointIndex++; spawnPoint(); }
+            if (clickCount >= 3) { clickCount = 0; currentPointIndex++; canClick = false; spawnPoint(); }
             else { t.style.transform = `translate(-50%, -50%) scale(${1 + clickCount * 0.3})`; }
         };
         area.appendChild(t);
@@ -211,7 +186,6 @@
         const boss = document.getElementById('boss-fish');
         document.getElementById('game-instr').innerHTML = "<b>LOOK AT THE SQUID!</b>";
         boss.classList.add('boss-active');
-        
         let samples = [];
         const stageBox = document.getElementById('stage').getBoundingClientRect();
         const targetX = stageBox.left + (stageBox.width / 2);
@@ -228,10 +202,18 @@
             finalAccuracy = Math.max(0, Math.min(100, 100 - (avgDist / 4.5))); 
             boss.classList.remove('boss-active');
             
-            document.getElementById('game-instr').style.display = 'none';
-            document.getElementById('final-score-display').innerText = Math.round(finalAccuracy);
-            document.getElementById('victory-modal').style.display = 'block';
+            if (finalAccuracy < 70 && !isBonusRound) {
+                isBonusRound = true; currentPointIndex = 0;
+                document.getElementById('game-instr').innerHTML = "<b>🌟 BONUS ROUND! 🌟</b>";
+                spawnPoint();
+            } else { showVictoryPopup(); }
         }, 4000);
+    }
+
+    function showVictoryPopup() {
+        document.getElementById('game-instr').style.display = 'none';
+        document.getElementById('final-score-display').innerText = Math.round(finalAccuracy);
+        document.getElementById('victory-modal').style.display = 'block';
     }
 
     window.closeVictory = function() {
@@ -248,20 +230,11 @@
         const stage = document.getElementById('stage').getBoundingClientRect();
         const nx = (currentGaze.x - stage.left) / stage.width;
         const ny = (currentGaze.y - stage.top) / stage.height;
-        
-        csvData.push([
-            new Date().toISOString(), SESSION_ID, PID, VID, YT_ID,
-            player.getCurrentTime().toFixed(3), nx.toFixed(4), ny.toFixed(4),
-            (nx >= 0 && nx <= 1 ? 1 : 0),
-            faceState.detected, faceState.centered, faceState.count,
-            faceState.width, faceState.height, faceState.confidence, faceState.symmetry,
-            finalAccuracy.toFixed(1)
-        ]);
+        csvData.push([new Date().toISOString(), SESSION_ID, PID, VID, YT_ID, player.getCurrentTime().toFixed(3), nx.toFixed(4), ny.toFixed(4), (nx >= 0 && nx <= 1 ? 1 : 0), faceState.detected, faceState.centered, faceState.count, faceState.width, faceState.height, faceState.confidence, faceState.symmetry, finalAccuracy.toFixed(1)]);
     }
 
     window.terminateSession = function() {
-        isRecording = false;
-        webgazer.pause();
+        isRecording = false; webgazer.pause();
         const csvContent = csvData.map(e => e.join(",")).join("\n");
         const blob = new Blob([csvContent], { type: 'text/csv' });
         const link = document.createElement('a');
@@ -271,11 +244,7 @@
     };
 
     window.onYouTubeIframeAPIReady = () => {
-        player = new YT.Player('player', {
-            videoId: YT_ID,
-            playerVars: { controls: 0, disablekb: 1, rel: 0 },
-            events: { onStateChange: (e) => { if(e.data === 0) terminateSession(); } }
-        });
+        player = new YT.Player('player', { videoId: YT_ID, playerVars: { controls: 0, disablekb: 1, rel: 0 }, events: { onStateChange: (e) => { if(e.data === 0) terminateSession(); } } });
     };
 
     initTrackers();
