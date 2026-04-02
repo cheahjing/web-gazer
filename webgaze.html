@@ -59,11 +59,7 @@
 <video id="camVideo" autoplay playsinline muted></video>
 
 <script type="module">
-    // --- PULLING IN YOUR EXACT WORKING IMPORTS ---
-    import {
-        FaceDetector,
-        FilesetResolver
-    } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
+    import { FaceDetector, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
 
     // --- SESSION ID GENERATOR ---
     function generateSessionId() {
@@ -81,7 +77,7 @@
     const params = new URLSearchParams(window.location.search);
     const PID = params.get("pid") || "P001";
     const VID = params.get("vid") || "V01";
-    const YT_ID = params.get("yt") || "905QNpTukIU";
+    const YT_ID = params.get("yt") || "905QNpTukIU"; // This will take your LX9u2D3kGyo
     const SESSION_ID = generateSessionId();
     document.getElementById('disp-pid').innerText = PID;
 
@@ -94,70 +90,41 @@
     const points = [[15,15],[85,15],[50,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
     const bonusPoints = [[12,12], [88,12], [12,88], [88,88]];
 
-    // --- PULLING IN YOUR EXACT WORKING INIT LOGIC ---
+    // --- MEDIAPIPE INIT ---
     async function init() {
         try {
-            const filesetResolver = await FilesetResolver.forVisionTasks(
-                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
-            );
+            const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
             faceDetector = await FaceDetector.createFromOptions(filesetResolver, {
-                baseOptions: {
-                    modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite"
-                },
-                runningMode: "VIDEO",
-                minDetectionConfidence: 0.5
+                baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite" },
+                runningMode: "VIDEO", minDetectionConfidence: 0.5
             });
-            
-            // Start Camera
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
             const camVideo = document.getElementById("camVideo");
             camVideo.srcObject = stream;
             await camVideo.play();
-            
             document.getElementById('init-msg').innerText = "Trackers Ready.";
             document.getElementById('startBtn').style.display = "block";
             startFaceLoop();
-        } catch (err) {
-            document.getElementById('init-msg').innerText = "❌ Init failed: " + err.message;
-        }
+        } catch (err) { document.getElementById('init-msg').innerText = "❌ Init failed: " + err.message; }
     }
 
     function startFaceLoop() {
         const video = document.getElementById('camVideo');
         function detect() {
             if (video.readyState >= 2) {
-                const timestamp = performance.now();
-                const result = faceDetector.detectForVideo(video, timestamp);
+                const result = faceDetector.detectForVideo(video, performance.now());
                 const detections = result?.detections || [];
-                
                 if (detections.length > 0) {
                     const d = detections[0];
-                    const box = d.boundingBox;
-                    const score = d.categories[0].score;
-                    
-                    // Symmetry logic from your reference
                     let symmetry = 1.0;
                     if (d.keypoints && d.keypoints.length >= 3) {
                         const distR = Math.hypot(d.keypoints[2].x - d.keypoints[0].x, d.keypoints[2].y - d.keypoints[0].y);
                         const distL = Math.hypot(d.keypoints[2].x - d.keypoints[1].x, d.keypoints[2].y - d.keypoints[1].y);
                         symmetry = Math.min(distL, distR) / Math.max(distL, distR);
                     }
-
-                    faceState = { 
-                        detected: 1, 
-                        count: detections.length, 
-                        width: Math.round(box.width), 
-                        height: Math.round(box.height), 
-                        confidence: score.toFixed(3), 
-                        symmetry: symmetry.toFixed(3), 
-                        centered: (d.keypoints[2].x > 0.3 && d.keypoints[2].x < 0.7) ? 1 : 0 
-                    };
-                    document.getElementById('dbgFace').innerText = "YES"; 
-                    document.getElementById('dbgSym').innerText = faceState.symmetry;
-                } else { 
-                    faceState.detected = 0; 
-                    document.getElementById('dbgFace').innerText = "NO"; 
-                }
+                    faceState = { detected: 1, count: detections.length, width: Math.round(d.boundingBox.width), height: Math.round(d.boundingBox.height), confidence: d.categories[0].score.toFixed(3), symmetry: symmetry.toFixed(3), centered: (d.keypoints[2].x > 0.3 && d.keypoints[2].x < 0.7) ? 1 : 0 };
+                    document.getElementById('dbgFace').innerText = "YES"; document.getElementById('dbgSym').innerText = faceState.symmetry;
+                } else { faceState.detected = 0; document.getElementById('dbgFace').innerText = "NO"; }
             }
             requestAnimationFrame(detect);
         }
@@ -185,25 +152,17 @@
         const area = document.getElementById('game-area');
         area.querySelectorAll('.fish-target').forEach(el => el.remove());
         const activePoints = isBonusRound ? bonusPoints : points;
-        
         if (currentPointIndex >= activePoints.length) {
             if (!isBonusRound) triggerCountdown();
             else showVictoryPopup();
             return;
         }
-
         const [x, y] = activePoints[currentPointIndex];
         const t = document.createElement('div');
         t.className = 'fish-target fish-red'; t.innerHTML = '🐠';
         t.style.left = x + "%"; t.style.top = y + "%";
         setTimeout(() => { t.classList.remove('fish-red'); t.classList.add('fish-blue'); canClick = true; }, 600);
-
-        t.onclick = () => {
-            if (!canClick) return;
-            clickCount++;
-            if (clickCount >= 3) { clickCount = 0; currentPointIndex++; canClick = false; spawnPoint(); }
-            else { t.style.transform = `translate(-50%, -50%) scale(${1 + clickCount * 0.3})`; }
-        };
+        t.onclick = () => { if (!canClick) return; clickCount++; if (clickCount >= 3) { clickCount = 0; currentPointIndex++; canClick = false; spawnPoint(); } else { t.style.transform = `translate(-50%, -50%) scale(${1 + clickCount * 0.3})`; } };
         area.appendChild(t);
     }
 
@@ -212,12 +171,7 @@
         document.getElementById('game-instr').innerHTML = "<b>Get ready to STARE!</b>";
         cd.style.display = 'flex';
         let c = 3;
-        const itv = setInterval(() => {
-            c--;
-            if (c > 0) cd.innerText = c;
-            else if (c === 0) cd.innerText = "STARE!";
-            else { clearInterval(itv); cd.style.display = 'none'; startBoss(); }
-        }, 1000);
+        const itv = setInterval(() => { c--; if (c > 0) cd.innerText = c; else if (c === 0) cd.innerText = "STARE!"; else { clearInterval(itv); cd.style.display = 'none'; startBoss(); } }, 1000);
     }
 
     function startBoss() {
@@ -228,23 +182,14 @@
         const stageBox = document.getElementById('stage').getBoundingClientRect();
         const targetX = stageBox.left + (stageBox.width / 2);
         const targetY = stageBox.top + (stageBox.height / 2);
-
-        const checkInterval = setInterval(() => {
-            const dist = Math.sqrt(Math.pow(currentGaze.x - targetX, 2) + Math.pow(currentGaze.y - targetY, 2));
-            samples.push(dist);
-        }, 100);
-
+        const checkInterval = setInterval(() => { samples.push(Math.sqrt(Math.pow(currentGaze.x - targetX, 2) + Math.pow(currentGaze.y - targetY, 2))); }, 100);
         setTimeout(() => {
             clearInterval(checkInterval);
             const avgDist = samples.reduce((a, b) => a + b, 0) / samples.length;
             finalAccuracy = Math.max(0, Math.min(100, 100 - (avgDist / 4.5))); 
             boss.classList.remove('boss-active');
-            
-            if (finalAccuracy < 70 && !isBonusRound) {
-                isBonusRound = true; currentPointIndex = 0;
-                document.getElementById('game-instr').innerHTML = "<b>🌟 BONUS ROUND! 🌟</b>";
-                spawnPoint();
-            } else { showVictoryPopup(); }
+            if (finalAccuracy < 70 && !isBonusRound) { isBonusRound = true; currentPointIndex = 0; document.getElementById('game-instr').innerHTML = "<b>🌟 BONUS ROUND! 🌟</b>"; spawnPoint(); } 
+            else { showVictoryPopup(); }
         }, 4000);
     }
 
@@ -254,17 +199,26 @@
         document.getElementById('victory-modal').style.display = 'block';
     }
 
+    // --- CRITICAL VIDEO FIX HERE ---
     window.closeVictory = function() {
         document.getElementById('game-area').style.display = 'none';
         document.getElementById('video-area').style.display = 'block';
         webgazer.showPredictionPoints(false);
-        player.playVideo();
-        isRecording = true;
-        setInterval(logRow, 1000);
+        
+        // Ensure the player is ready before playing
+        if (player && typeof player.playVideo === 'function') {
+            player.playVideo();
+            isRecording = true;
+            setInterval(logRow, 1000);
+        } else {
+            console.error("YouTube Player not ready yet.");
+            // Fallback: try to re-init player if it failed
+            onYouTubeIframeAPIReady(); 
+        }
     };
 
     function logRow() {
-        if (!isRecording) return;
+        if (!isRecording || !player) return;
         const stage = document.getElementById('stage').getBoundingClientRect();
         const nx = (currentGaze.x - stage.left) / stage.width;
         const ny = (currentGaze.y - stage.top) / stage.height;
@@ -272,7 +226,8 @@
     }
 
     window.terminateSession = function() {
-        isRecording = false; webgazer.pause();
+        isRecording = false; 
+        if(window.webgazer) webgazer.pause();
         const csvContent = csvData.map(e => e.join(",")).join("\n");
         const blob = new Blob([csvContent], { type: 'text/csv' });
         const link = document.createElement('a');
@@ -281,11 +236,24 @@
         link.click();
     };
 
-    window.onYouTubeIframeAPIReady = () => {
-        player = new YT.Player('player', { videoId: YT_ID, playerVars: { controls: 0, disablekb: 1, rel: 0 }, events: { onStateChange: (e) => { if(e.data === 0) terminateSession(); } } });
+    // Make sure this is globally available for the YouTube script to find
+    window.onYouTubeIframeAPIReady = function() {
+        player = new YT.Player('player', {
+            videoId: YT_ID,
+            playerVars: { 
+                'controls': 0, 
+                'disablekb': 1, 
+                'rel': 0, 
+                'modestbranding': 1,
+                'autoplay': 0 // We trigger play manually after calibration
+            },
+            events: {
+                'onReady': (event) => console.log("YouTube Ready"),
+                'onStateChange': (e) => { if(e.data === 0) terminateSession(); }
+            }
+        });
     };
 
-    // Run your reference init style
     init();
 </script>
 <script src="https://www.youtube.com/iframe_api"></script>
