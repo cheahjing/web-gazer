@@ -10,7 +10,6 @@
         #app-viewport { position: relative; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
         #stage { position: relative; width: 85%; height: 80%; background: #ffffff; border: 8px solid #0077be; border-radius: 25px; z-index: 10; overflow: hidden; }
         #webgazerGazeDot { z-index: 2147483647 !important; border: 2px solid white !important; }
-        
         .fish-target { position: absolute; display: flex !important; align-items: center; justify-content: center; width: 120px; height: 120px; transform: translate(-50%, -50%); font-size: 70px; z-index: 1000; transition: filter 0.2s, transform 0.2s; cursor: default; background: transparent !important; outline: none !important; user-select: none; }
         .fish-red { filter: grayscale(1) sepia(1) saturate(8) hue-rotate(-50deg); opacity: 0.7; }
         .fish-blue { filter: none; opacity: 1; cursor: pointer; }
@@ -20,11 +19,8 @@
         #victory-modal { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border: 10px solid #ffd700; border-radius: 30px; padding: 40px; text-align: center; z-index: 2000; display: none; box-shadow: 0 20px 50px rgba(0,0,0,0.2); }
         #video-area, #player { width: 100%; height: 100%; }
         #game-instr { position: absolute; top: 15px; width: 100%; text-align: center; font-size: 24px; color: #0077be; z-index: 1100; font-weight: bold; }
-        
         #debug-bar { position: fixed; top: 0; width: 100%; background: #333; color: white; padding: 10px 20px; z-index: 2147483646; display: flex; gap: 20px; font-family: monospace; font-size: 11px; align-items: center;}
-        .status-on { color: #00ff00; font-weight: bold; } 
-        .status-off { color: #ff4444; font-weight: bold; }
-        
+        .status-on { color: #00ff00; font-weight: bold; } .status-off { color: #ff4444; font-weight: bold; }
         #overlay { position: fixed; inset: 0; background: #ffffff; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2147483645; text-align: center; }
         #camVideo { display: none; }
     </style>
@@ -39,7 +35,7 @@
     <span style="border-left: 1px solid #666; padding-left: 10px;">
         MANUAL: <span id="manual-status" class="status-on">ENGAGED (↑)</span>
     </span>
-    <button onclick="terminateSession()" style="margin-left:auto; cursor:pointer; background:#ff4444; color:white; border:none; padding:4px 12px; border-radius:4px; font-weight:bold;">⏹ STOP & SAVE</button>
+    <button onclick="terminateSession()" style="margin-left:auto; cursor:pointer; background:#ff4444; color:white; border:none; padding:4px 12px; border-radius:4px; font-weight:bold;">⏹ Stop & Save</button>
 </div>
 
 <div id="app-viewport">
@@ -70,10 +66,10 @@
     import { FaceDetector, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
 
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbytdM7UB1IrDmA4qK3qdQWMR5ZXgq3xBtZyfPH4c-bEK98oq-QjbvBCUKlHnYO4HgWINw/exec";
-    
+
     function generateSessionId() {
         const now = new Date();
-        return `sess_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}_${Math.floor(Math.random() * 100)}`;
+        return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
     }
 
     const params = new URLSearchParams(window.location.search);
@@ -81,6 +77,7 @@
     const VID = params.get("vid") || "V01";
     const YT_ID = params.get("yt") || "905QNpTukIU";
     const SESSION_ID = generateSessionId();
+    const FULL_FILENAME = `${PID}_${VID}_${SESSION_ID}`;
     document.getElementById('disp-pid').innerText = PID;
 
     let csvData = [["timestamp", "session_id", "participant_id", "video_id", "youtube_id", "video_time", "gaze_x", "gaze_y", "on_screen", "face_detected", "face_centered", "face_count", "face_width", "face_height", "detection_confidence", "head_symmetry", "calibration_score", "manual_engagement"]];
@@ -93,26 +90,23 @@
     const points = [[15,15],[85,15],[50,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
     const bonusPoints = [[12,12], [88,12], [12,88], [88,88]];
 
-    // Manual Tracker Keys
+    // Manual Engagement Handler
     window.addEventListener('keydown', (e) => {
         const display = document.getElementById('manual-status');
         if (e.key === "ArrowUp") { manualEngagement = 1; display.innerText = "ENGAGED (↑)"; display.className = "status-on"; }
         else if (e.key === "ArrowDown") { manualEngagement = 0; display.innerText = "LOOKED AWAY (↓)"; display.className = "status-off"; }
     });
 
-    // YouTube Setup (Explicitly Global)
+    // YouTube API Setup
     window.onYouTubeIframeAPIReady = function() {
         player = new YT.Player('player', {
             videoId: YT_ID,
-            playerVars: { 'controls': 0, 'disablekb': 1, 'rel': 0, 'modestbranding': 1, 'autoplay': 0 },
-            events: {
-                'onReady': () => console.log("YT Player Hooked"),
-                'onStateChange': (e) => { if(e.data === 0) terminateSession(); }
-            }
+            playerVars: { 'controls': 0, 'disablekb': 1, 'rel': 0, 'modestbranding': 1 },
+            events: { 'onStateChange': (e) => { if(e.data === 0) terminateSession(); } }
         });
     };
 
-    // MediaPipe Setup
+    // RESTORED WORKING MEDIAPIPE PATTERN
     async function init() {
         try {
             const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
@@ -121,7 +115,9 @@
                 runningMode: "VIDEO", minDetectionConfidence: 0.5
             });
             const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-            document.getElementById("camVideo").srcObject = stream;
+            const camVideo = document.getElementById("camVideo");
+            camVideo.srcObject = stream;
+            await camVideo.play();
             document.getElementById('init-msg').innerText = "Trackers Ready.";
             document.getElementById('startBtn').style.display = "block";
             startFaceLoop();
@@ -220,16 +216,10 @@
         document.getElementById('game-area').style.display = 'none';
         document.getElementById('video-area').style.display = 'block';
         if (window.webgazer) webgazer.showPredictionPoints(false);
-        
         if (player && typeof player.playVideo === 'function') {
             player.playVideo();
             isRecording = true;
             setInterval(logRow, 1000);
-        } else {
-            // Force re-init if YT wasn't ready
-            console.log("Player not ready, attempting re-init...");
-            window.onYouTubeIframeAPIReady();
-            setTimeout(window.closeVictory, 1000);
         }
     };
 
@@ -259,18 +249,19 @@
         if(window.webgazer) webgazer.pause();
         const csvContent = csvData.map(e => e.join(",")).join("\n");
         
+        // Named for child/video/session
         const blob = new Blob([csvContent], { type: 'text/csv' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `${PID}_${VID}_${SESSION_ID}.csv`;
+        link.download = `${FULL_FILENAME}.csv`;
         link.click();
 
+        // Pass full filename to G-Drive script
         fetch(SCRIPT_URL, {
             method: 'POST',
             mode: 'no-cors',
-            headers: { 'Content-Type': 'text/plain' },
             body: csvContent
-        }).then(() => alert("Data saved to Drive!"));
+        }).then(() => alert("Saved as: " + FULL_FILENAME));
     };
 
     init();
