@@ -10,7 +10,7 @@
         #stage { position: relative; width: 85%; height: 80%; background: #ffffff; border: 8px solid #0077be; border-radius: 25px; z-index: 10; overflow: hidden; }
         #webgazerGazeDot { z-index: 2147483647 !important; border: 2px solid white !important; }
         
-        /* Game Elements */
+        /* Game UI */
         .fish-target { position: absolute; display: flex !important; align-items: center; justify-content: center; width: 120px; height: 120px; transform: translate(-50%, -50%); font-size: 70px; z-index: 1000; transition: filter 0.2s, transform 0.2s; cursor: default; background: transparent !important; outline: none !important; user-select: none; }
         .fish-red { filter: grayscale(1) sepia(1) saturate(8) hue-rotate(-50deg); opacity: 0.7; }
         .fish-blue { filter: none; opacity: 1; cursor: pointer; }
@@ -21,11 +21,10 @@
         #video-area, #player { width: 100%; height: 100%; }
         #game-instr { position: absolute; top: 15px; width: 100%; text-align: center; font-size: 24px; color: #0077be; z-index: 1100; font-weight: bold; }
         
-        /* Debug / Control Bar */
+        /* Debug Bar & Status */
         #debug-bar { position: fixed; top: 0; width: 100%; background: #333; color: white; padding: 10px 20px; z-index: 2147483646; display: flex; gap: 20px; font-family: monospace; font-size: 11px; align-items: center;}
         .status-on { color: #00ff00; font-weight: bold; } 
         .status-off { color: #ff4444; font-weight: bold; }
-        .manual-btn { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; }
         
         #overlay { position: fixed; inset: 0; background: #ffffff; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2147483645; text-align: center; }
         #camVideo { display: none; }
@@ -39,9 +38,9 @@
     <span>FACE: <span id="dbgFace">--</span></span>
     <span>SYM: <span id="dbgSym">--</span></span>
     <span style="border-left: 1px solid #666; padding-left: 10px;">
-        MANUAL ENGAGEMENT: <span id="manual-status" class="status-on">ENGAGED (↑)</span>
+        MANUAL: <span id="manual-status" class="status-on">ENGAGED (↑)</span>
     </span>
-    <button onclick="terminateSession()" style="margin-left:auto; cursor:pointer; background:#ff4444; color:white; border:none; padding:4px 12px; border-radius:4px; font-weight: bold;">⏹ STOP & SAVE</button>
+    <button onclick="terminateSession()" style="margin-left:auto; cursor:pointer; background:#ff4444; color:white; border:none; padding:4px 12px; border-radius:4px; font-weight:bold;">⏹ STOP & SAVE</button>
 </div>
 
 <div id="app-viewport">
@@ -60,7 +59,7 @@
         <div id="video-area" style="display:none;"><div id="player"></div></div>
     </div>
     <div id="overlay">
-        <h1>🌊 Bird Research Session</h1>
+        <h1>🌊 Research Session</h1>
         <p id="init-msg">Initializing Trackers...</p>
         <button id="startBtn" onclick="initExperience()" style="display:none; padding:20px 60px; font-size:1.5rem; cursor:pointer; background:#0077be; color:white; border:none; border-radius:50px; font-weight:bold;">START</button>
     </div>
@@ -72,16 +71,11 @@
     import { FaceDetector, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
 
     // --- CONFIG & SESSION ---
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbytdM7UB1IrDmA4qK3qdQWMR5ZXgq3xBtZyfPH4c-bEK98oq-QjbvBCUKlHnYO4HgWINw/exec";
+    
     function generateSessionId() {
         const now = new Date();
-        const YYYY = now.getFullYear();
-        const MM = String(now.getMonth() + 1).padStart(2, "0");
-        const DD = String(now.getDate()).padStart(2, "0");
-        const HH = String(now.getHours()).padStart(2, "0");
-        const mm = String(now.getMinutes()).padStart(2, "0");
-        const SS = String(now.getSeconds()).padStart(2, "0");
-        const randomSuffix = String(Math.floor(Math.random() * 100)).padStart(2, "0");
-        return `sess_${YYYY}${MM}${DD}_${HH}${mm}${SS}_${randomSuffix}`;
+        return `sess_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}_${Math.floor(Math.random() * 100)}`;
     }
 
     const params = new URLSearchParams(window.location.search);
@@ -91,19 +85,18 @@
     const SESSION_ID = generateSessionId();
     document.getElementById('disp-pid').innerText = PID;
 
-    // --- LOGGING DATA STRUCTURE ---
-    // Added "manual_engagement" column
+    // --- LOGGING DATA ---
     let csvData = [["timestamp", "session_id", "participant_id", "video_id", "youtube_id", "video_time", "gaze_x", "gaze_y", "on_screen", "face_detected", "face_centered", "face_count", "face_width", "face_height", "detection_confidence", "head_symmetry", "calibration_score", "manual_engagement"]];
-    
     let currentGaze = { x: 0, y: 0 };
     let faceState = { detected: 0, centered: 0, count: 0, width: 0, height: 0, confidence: 0, symmetry: 0 };
+    let manualEngagement = 1; // Default to engaged
     let player = null, isRecording = false, faceDetector = null, finalAccuracy = 0;
     let currentPointIndex = 0, clickCount = 0, canClick = false, isBonusRound = false;
-    
-    // Manual Logger Status (Default: 1 = Engaged)
-    let manualEngagement = 1; 
 
-    // --- KEYBOARD LISTENERS FOR RESEARCHER ---
+    const points = [[15,15],[85,15],[50,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
+    const bonusPoints = [[12,12], [88,12], [12,88], [88,88]];
+
+    // --- MANUAL LOGGER KEYBOARD LISTENER ---
     window.addEventListener('keydown', (e) => {
         const display = document.getElementById('manual-status');
         if (e.key === "ArrowUp") {
@@ -117,20 +110,26 @@
         }
     });
 
-    // --- MEDIAPIPE & CAMERA ---
+    // --- MEDIAPIPE INIT ---
     async function init() {
         try {
-            const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
+            // Updated: Using a more specific resolver path to prevent MediaPipe failures
+            const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm");
             faceDetector = await FaceDetector.createFromOptions(filesetResolver, {
                 baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite" },
                 runningMode: "VIDEO", minDetectionConfidence: 0.5
             });
             const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-            document.getElementById("camVideo").srcObject = stream;
+            const camVideo = document.getElementById("camVideo");
+            camVideo.srcObject = stream;
+            await camVideo.play();
             document.getElementById('init-msg').innerText = "Trackers Ready.";
             document.getElementById('startBtn').style.display = "block";
             startFaceLoop();
-        } catch (err) { document.getElementById('init-msg').innerText = "❌ Init failed: " + err.message; }
+        } catch (err) { 
+            console.error(err);
+            document.getElementById('init-msg').innerText = "❌ MediaPipe Error: Check your Camera or Internet."; 
+        }
     }
 
     function startFaceLoop() {
@@ -156,10 +155,7 @@
         detect();
     }
 
-    // --- CALIBRATION LOGIC (OMITTED FOR BREVITY - SAME AS PREVIOUS) ---
-    // [I am keeping the existing points/spawnPoint/triggerCountdown/startBoss functions here]
-    const points = [[15,15],[85,15],[50,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
-    const bonusPoints = [[12,12], [88,12], [12,88], [88,88]];
+    // --- CALIBRATION & GAME ---
     window.initExperience = async function() {
         document.getElementById('overlay').style.display = 'none';
         await webgazer.setRegression('ridge').setGazeListener((data) => {
@@ -169,16 +165,21 @@
         document.getElementById('game-area').style.display = 'block';
         spawnPoint();
     };
+
     function updateOnScreenStatus() {
         const onScreen = (currentGaze.x >= 0 && currentGaze.x <= window.innerWidth && currentGaze.y >= 0 && currentGaze.y <= window.innerHeight);
         const span = document.getElementById('disp-screen');
         span.innerText = onScreen ? "IN" : "OUT"; span.className = onScreen ? "status-on" : "status-off";
     }
+
     function spawnPoint() {
         const area = document.getElementById('game-area');
         area.querySelectorAll('.fish-target').forEach(el => el.remove());
         const activePoints = isBonusRound ? bonusPoints : points;
-        if (currentPointIndex >= activePoints.length) { if (!isBonusRound) triggerCountdown(); else showVictoryPopup(); return; }
+        if (currentPointIndex >= activePoints.length) {
+            if (!isBonusRound) triggerCountdown(); else showVictoryPopup();
+            return;
+        }
         const [x, y] = activePoints[currentPointIndex];
         const t = document.createElement('div');
         t.className = 'fish-target fish-red'; t.innerHTML = '🐠';
@@ -187,43 +188,46 @@
         t.onclick = () => { if (!canClick) return; clickCount++; if (clickCount >= 3) { clickCount = 0; currentPointIndex++; canClick = false; spawnPoint(); } else { t.style.transform = `translate(-50%, -50%) scale(${1 + clickCount * 0.3})`; } };
         area.appendChild(t);
     }
+
     function triggerCountdown() {
-        const cd = document.getElementById('countdown-overlay'); document.getElementById('game-instr').innerHTML = "<b>Get ready to STARE!</b>";
+        const cd = document.getElementById('countdown-overlay');
         cd.style.display = 'flex'; let c = 3;
         const itv = setInterval(() => { c--; if (c > 0) cd.innerText = c; else if (c === 0) cd.innerText = "STARE!"; else { clearInterval(itv); cd.style.display = 'none'; startBoss(); } }, 1000);
     }
+
     function startBoss() {
-        const boss = document.getElementById('boss-fish'); document.getElementById('game-instr').innerHTML = "<b>LOOK AT THE SQUID!</b>";
-        boss.classList.add('boss-active'); let samples = [];
+        const boss = document.getElementById('boss-fish');
+        boss.classList.add('boss-active');
+        let samples = [];
         const stageBox = document.getElementById('stage').getBoundingClientRect();
-        const targetX = stageBox.left + (stageBox.width / 2); const targetY = stageBox.top + (stageBox.height / 2);
+        const targetX = stageBox.left + (stageBox.width / 2);
+        const targetY = stageBox.top + (stageBox.height / 2);
         const checkInterval = setInterval(() => { samples.push(Math.sqrt(Math.pow(currentGaze.x - targetX, 2) + Math.pow(currentGaze.y - targetY, 2))); }, 100);
         setTimeout(() => {
             clearInterval(checkInterval);
             const avgDist = samples.reduce((a, b) => a + b, 0) / samples.length;
             finalAccuracy = Math.max(0, Math.min(100, 100 - (avgDist / 4.5))); 
             boss.classList.remove('boss-active');
-            if (finalAccuracy < 70 && !isBonusRound) { isBonusRound = true; currentPointIndex = 0; document.getElementById('game-instr').innerHTML = "<b>🌟 BONUS ROUND! 🌟</b>"; spawnPoint(); } 
+            if (finalAccuracy < 70 && !isBonusRound) { isBonusRound = true; currentPointIndex = 0; spawnPoint(); } 
             else { showVictoryPopup(); }
         }, 4000);
     }
+
     function showVictoryPopup() {
         document.getElementById('game-instr').style.display = 'none';
         document.getElementById('final-score-display').innerText = Math.round(finalAccuracy);
         document.getElementById('victory-modal').style.display = 'block';
     }
 
-    // --- VIDEO TRANSITION & REFINED LOGGING ---
+    // --- VIDEO & RECORDING ---
     window.closeVictory = function() {
-        console.log("Session Started. Use Arrows for manual engagement.");
         document.getElementById('game-area').style.display = 'none';
         document.getElementById('video-area').style.display = 'block';
         if (window.webgazer) webgazer.showPredictionPoints(false);
-        
         if (player && typeof player.playVideo === 'function') {
             player.playVideo();
             isRecording = true;
-            setInterval(logRow, 1000); // Steady 1s heart-beat logging
+            setInterval(logRow, 1000);
         }
     };
 
@@ -233,62 +237,47 @@
             const stage = document.getElementById('stage').getBoundingClientRect();
             const nx = (currentGaze.x - stage.left) / stage.width;
             const ny = (currentGaze.y - stage.top) / stage.height;
-            
             let vTime = -1;
             try { vTime = player.getCurrentTime(); } catch(e) {}
 
-            const row = [
-                new Date().toISOString(), 
-                SESSION_ID, 
-                PID, 
-                VID, 
-                YT_ID,
-                vTime.toFixed(3), 
-                nx.toFixed(4), 
-                ny.toFixed(4),
+            csvData.push([
+                new Date().toISOString(), SESSION_ID, PID, VID, YT_ID,
+                vTime.toFixed(3), nx.toFixed(4), ny.toFixed(4),
                 (nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1 ? 1 : 0),
-                faceState.detected, 
-                faceState.centered, 
-                faceState.count,
-                faceState.width, 
-                faceState.height, 
-                faceState.confidence, 
-                faceState.symmetry,
+                faceState.detected, faceState.centered, faceState.count,
+                faceState.width, faceState.height, faceState.confidence, faceState.symmetry,
                 finalAccuracy.toFixed(1),
-                manualEngagement // This captures the Up/Down Arrow state
-            ];
-            csvData.push(row);
-            if (csvData.length % 5 === 0) console.log(`Logged ${csvData.length - 1} rows. Manual state: ${manualEngagement}`);
-        } catch (err) { console.error("Logger Error:", err); }
+                manualEngagement
+            ]);
+        } catch (err) { console.error(err); }
     }
 
     window.terminateSession = function() {
         if (!isRecording) return;
         isRecording = false; 
         if(window.webgazer) webgazer.pause();
-        
         const csvContent = csvData.map(e => e.join(",")).join("\n");
         
-        // 1. Automatic Download (Standard)
+        // Backup: Local Download
         const blob = new Blob([csvContent], { type: 'text/csv' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
         link.download = `${PID}_${VID}_${SESSION_ID}.csv`;
         link.click();
 
-
-	// 2. NEW: Push to Google Drive
-    	const scriptURL = "https://script.google.com/macros/s/AKfycbytdM7UB1IrDmA4qK3qdQWMR5ZXgq3xBtZyfPH4c-bEK98oq-QjbvBCUKlHnYO4HgWINw/exec";
-
-   	 fetch(scriptURL, {
-        	method: 'POST',
-        	mode: 'no-cors', // Critical for cross-origin Google scripts
-       	 headers: { 'Content-Type': 'text/plain' },
-        	body: csvContent
-    	})
-    	.then(() => console.log("Data successfully synced to G Drive folder."))
-    	.catch((err) => console.error("G Drive Sync Failed:", err));
-	};
+        // Primary: Sync to Google Drive
+        fetch(SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: csvContent
+        }).then(() => {
+            alert("Data successfully saved to Google Drive!");
+        }).catch(err => {
+            console.error("G-Drive Sync Error:", err);
+            alert("Cloud sync failed. Local backup downloaded.");
+        });
+    };
 
     window.onYouTubeIframeAPIReady = function() {
         player = new YT.Player('player', {
