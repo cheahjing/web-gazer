@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Bird Study: Research Grade Logger</title>
+    <script src="https://www.youtube.com/iframe_api"></script>
     <script src="https://cdn.jsdelivr.net/npm/webgazer@2.1.1/dist/webgazer.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #f8fbff; font-family: 'Comic Sans MS', cursive, sans-serif; overflow: hidden; }
@@ -10,7 +11,6 @@
         #stage { position: relative; width: 85%; height: 80%; background: #ffffff; border: 8px solid #0077be; border-radius: 25px; z-index: 10; overflow: hidden; }
         #webgazerGazeDot { z-index: 2147483647 !important; border: 2px solid white !important; }
         
-        /* Game UI */
         .fish-target { position: absolute; display: flex !important; align-items: center; justify-content: center; width: 120px; height: 120px; transform: translate(-50%, -50%); font-size: 70px; z-index: 1000; transition: filter 0.2s, transform 0.2s; cursor: default; background: transparent !important; outline: none !important; user-select: none; }
         .fish-red { filter: grayscale(1) sepia(1) saturate(8) hue-rotate(-50deg); opacity: 0.7; }
         .fish-blue { filter: none; opacity: 1; cursor: pointer; }
@@ -21,7 +21,6 @@
         #video-area, #player { width: 100%; height: 100%; }
         #game-instr { position: absolute; top: 15px; width: 100%; text-align: center; font-size: 24px; color: #0077be; z-index: 1100; font-weight: bold; }
         
-        /* Debug Bar & Status */
         #debug-bar { position: fixed; top: 0; width: 100%; background: #333; color: white; padding: 10px 20px; z-index: 2147483646; display: flex; gap: 20px; font-family: monospace; font-size: 11px; align-items: center;}
         .status-on { color: #00ff00; font-weight: bold; } 
         .status-off { color: #ff4444; font-weight: bold; }
@@ -70,7 +69,6 @@
 <script type="module">
     import { FaceDetector, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
 
-    // --- CONFIG & SESSION ---
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbytdM7UB1IrDmA4qK3qdQWMR5ZXgq3xBtZyfPH4c-bEK98oq-QjbvBCUKlHnYO4HgWINw/exec";
     
     function generateSessionId() {
@@ -85,51 +83,49 @@
     const SESSION_ID = generateSessionId();
     document.getElementById('disp-pid').innerText = PID;
 
-    // --- LOGGING DATA ---
     let csvData = [["timestamp", "session_id", "participant_id", "video_id", "youtube_id", "video_time", "gaze_x", "gaze_y", "on_screen", "face_detected", "face_centered", "face_count", "face_width", "face_height", "detection_confidence", "head_symmetry", "calibration_score", "manual_engagement"]];
     let currentGaze = { x: 0, y: 0 };
     let faceState = { detected: 0, centered: 0, count: 0, width: 0, height: 0, confidence: 0, symmetry: 0 };
-    let manualEngagement = 1; // Default to engaged
+    let manualEngagement = 1;
     let player = null, isRecording = false, faceDetector = null, finalAccuracy = 0;
     let currentPointIndex = 0, clickCount = 0, canClick = false, isBonusRound = false;
 
     const points = [[15,15],[85,15],[50,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
     const bonusPoints = [[12,12], [88,12], [12,88], [88,88]];
 
-    // --- MANUAL LOGGER KEYBOARD LISTENER ---
+    // Manual Tracker Keys
     window.addEventListener('keydown', (e) => {
         const display = document.getElementById('manual-status');
-        if (e.key === "ArrowUp") {
-            manualEngagement = 1;
-            display.innerText = "ENGAGED (↑)";
-            display.className = "status-on";
-        } else if (e.key === "ArrowDown") {
-            manualEngagement = 0;
-            display.innerText = "LOOKED AWAY (↓)";
-            display.className = "status-off";
-        }
+        if (e.key === "ArrowUp") { manualEngagement = 1; display.innerText = "ENGAGED (↑)"; display.className = "status-on"; }
+        else if (e.key === "ArrowDown") { manualEngagement = 0; display.innerText = "LOOKED AWAY (↓)"; display.className = "status-off"; }
     });
 
-    // --- MEDIAPIPE INIT ---
+    // YouTube Setup (Explicitly Global)
+    window.onYouTubeIframeAPIReady = function() {
+        player = new YT.Player('player', {
+            videoId: YT_ID,
+            playerVars: { 'controls': 0, 'disablekb': 1, 'rel': 0, 'modestbranding': 1, 'autoplay': 0 },
+            events: {
+                'onReady': () => console.log("YT Player Hooked"),
+                'onStateChange': (e) => { if(e.data === 0) terminateSession(); }
+            }
+        });
+    };
+
+    // MediaPipe Setup
     async function init() {
         try {
-            // Updated: Using a more specific resolver path to prevent MediaPipe failures
-            const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm");
+            const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
             faceDetector = await FaceDetector.createFromOptions(filesetResolver, {
                 baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite" },
                 runningMode: "VIDEO", minDetectionConfidence: 0.5
             });
             const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-            const camVideo = document.getElementById("camVideo");
-            camVideo.srcObject = stream;
-            await camVideo.play();
+            document.getElementById("camVideo").srcObject = stream;
             document.getElementById('init-msg').innerText = "Trackers Ready.";
             document.getElementById('startBtn').style.display = "block";
             startFaceLoop();
-        } catch (err) { 
-            console.error(err);
-            document.getElementById('init-msg').innerText = "❌ MediaPipe Error: Check your Camera or Internet."; 
-        }
+        } catch (err) { document.getElementById('init-msg').innerText = "❌ Init failed: " + err.message; }
     }
 
     function startFaceLoop() {
@@ -155,7 +151,6 @@
         detect();
     }
 
-    // --- CALIBRATION & GAME ---
     window.initExperience = async function() {
         document.getElementById('overlay').style.display = 'none';
         await webgazer.setRegression('ridge').setGazeListener((data) => {
@@ -191,12 +186,14 @@
 
     function triggerCountdown() {
         const cd = document.getElementById('countdown-overlay');
+        document.getElementById('game-instr').innerHTML = "<b>Get ready to STARE!</b>";
         cd.style.display = 'flex'; let c = 3;
         const itv = setInterval(() => { c--; if (c > 0) cd.innerText = c; else if (c === 0) cd.innerText = "STARE!"; else { clearInterval(itv); cd.style.display = 'none'; startBoss(); } }, 1000);
     }
 
     function startBoss() {
         const boss = document.getElementById('boss-fish');
+        document.getElementById('game-instr').innerHTML = "<b>LOOK AT THE SQUID!</b>";
         boss.classList.add('boss-active');
         let samples = [];
         const stageBox = document.getElementById('stage').getBoundingClientRect();
@@ -208,7 +205,7 @@
             const avgDist = samples.reduce((a, b) => a + b, 0) / samples.length;
             finalAccuracy = Math.max(0, Math.min(100, 100 - (avgDist / 4.5))); 
             boss.classList.remove('boss-active');
-            if (finalAccuracy < 70 && !isBonusRound) { isBonusRound = true; currentPointIndex = 0; spawnPoint(); } 
+            if (finalAccuracy < 70 && !isBonusRound) { isBonusRound = true; currentPointIndex = 0; document.getElementById('game-instr').innerHTML = "<b>🌟 BONUS ROUND! 🌟</b>"; spawnPoint(); } 
             else { showVictoryPopup(); }
         }, 4000);
     }
@@ -219,15 +216,20 @@
         document.getElementById('victory-modal').style.display = 'block';
     }
 
-    // --- VIDEO & RECORDING ---
     window.closeVictory = function() {
         document.getElementById('game-area').style.display = 'none';
         document.getElementById('video-area').style.display = 'block';
         if (window.webgazer) webgazer.showPredictionPoints(false);
+        
         if (player && typeof player.playVideo === 'function') {
             player.playVideo();
             isRecording = true;
             setInterval(logRow, 1000);
+        } else {
+            // Force re-init if YT wasn't ready
+            console.log("Player not ready, attempting re-init...");
+            window.onYouTubeIframeAPIReady();
+            setTimeout(window.closeVictory, 1000);
         }
     };
 
@@ -246,8 +248,7 @@
                 (nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1 ? 1 : 0),
                 faceState.detected, faceState.centered, faceState.count,
                 faceState.width, faceState.height, faceState.confidence, faceState.symmetry,
-                finalAccuracy.toFixed(1),
-                manualEngagement
+                finalAccuracy.toFixed(1), manualEngagement
             ]);
         } catch (err) { console.error(err); }
     }
@@ -258,37 +259,21 @@
         if(window.webgazer) webgazer.pause();
         const csvContent = csvData.map(e => e.join(",")).join("\n");
         
-        // Backup: Local Download
         const blob = new Blob([csvContent], { type: 'text/csv' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
         link.download = `${PID}_${VID}_${SESSION_ID}.csv`;
         link.click();
 
-        // Primary: Sync to Google Drive
         fetch(SCRIPT_URL, {
             method: 'POST',
             mode: 'no-cors',
             headers: { 'Content-Type': 'text/plain' },
             body: csvContent
-        }).then(() => {
-            alert("Data successfully saved to Google Drive!");
-        }).catch(err => {
-            console.error("G-Drive Sync Error:", err);
-            alert("Cloud sync failed. Local backup downloaded.");
-        });
-    };
-
-    window.onYouTubeIframeAPIReady = function() {
-        player = new YT.Player('player', {
-            videoId: YT_ID,
-            playerVars: { 'controls': 0, 'disablekb': 1, 'rel': 0, 'modestbranding': 1 },
-            events: { 'onStateChange': (e) => { if(e.data === 0) terminateSession(); } }
-        });
+        }).then(() => alert("Data saved to Drive!"));
     };
 
     init();
 </script>
-<script src="https://www.youtube.com/iframe_api"></script>
 </body>
 </html>
