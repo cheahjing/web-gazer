@@ -275,7 +275,14 @@
 
   function generateSessionId() {
     const now = new Date();
-    return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+    const YYYY = now.getFullYear();
+    const MM = String(now.getMonth() + 1).padStart(2, "0");
+    const DD = String(now.getDate()).padStart(2, "0");
+    const HH = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
+    const SS = String(now.getSeconds()).padStart(2, "0");
+    const randomSuffix = String(Math.floor(Math.random() * 100)).padStart(2, "0");
+    return `sess_${YYYY}${MM}${DD}_${HH}${mm}${SS}_${randomSuffix}`;
   }
 
   const params = new URLSearchParams(window.location.search);
@@ -288,10 +295,24 @@
   document.getElementById("disp-pid").innerText = PID;
 
   let csvData = [[
-    "timestamp", "session_id", "participant_id", "video_id", "youtube_id", "video_time",
-    "gaze_x", "gaze_y", "on_screen", "face_detected", "face_centered", "face_count",
-    "face_width", "face_height", "detection_confidence", "head_symmetry",
-    "calibration_score", "manual_engagement"
+    "timestamp",
+    "session_id",
+    "participant_id",
+    "video_id",
+    "youtube_id",
+    "video_time",
+    "gaze_x",
+    "gaze_y",
+    "on_screen",
+    "face_detected",
+    "face_centered",
+    "face_count",
+    "face_width",
+    "face_height",
+    "detection_confidence",
+    "head_symmetry",
+    "calibration_score",
+    "manual_engagement"
   ]];
 
   let currentGaze = { x: 0, y: 0 };
@@ -310,17 +331,8 @@
   let youtubePlayerReady = false;
   let youtubeScriptInjected = false;
 
-  const points = [
-    [10,10],[50,10],[90,10],
-    [10,30],[50,30],[90,30],
-    [10,50],[50,50],[90,50],
-    [10,70],[50,70],[90,70],
-    [10,90],[50,90],[90,90]
-  ];
-
-  const bonusPoints = [
-    [20,20],[80,20],[20,80],[80,80],[50,50]
-  ];
+  const points = [[15,15],[85,15],[50,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
+  const bonusPoints = [[12,12], [88,12], [12,88], [88,88]];
 
   function setVideoDebug(msg) {
     document.getElementById("video-debug").innerText = msg;
@@ -385,7 +397,6 @@
 
           if (e.data === YT.PlayerState.PLAYING) {
             hideVideoLoading();
-
             if (!isRecording) isRecording = true;
             if (!logInterval) logInterval = setInterval(logRow, 1000);
           }
@@ -401,9 +412,7 @@
         onError: function (e) {
           setVideoDebug("YouTube error code: " + e.data);
           showVideoLoading("Unable to play video");
-          showVideoError(
-            "YouTube error code: " + e.data + ". This often means the video ID is invalid or embedding is disabled for that video."
-          );
+          showVideoError("YouTube error code: " + e.data + ". This often means the video ID is invalid or embedding is disabled for that video.");
         }
       }
     });
@@ -437,11 +446,7 @@
       });
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: "user",
-          width: { ideal: 640 },
-          height: { ideal: 480 }
-        }
+        video: { facingMode: "user" }
       });
 
       const camVideo = document.getElementById("camVideo");
@@ -518,10 +523,7 @@
       webgazer.applyKalmanFilter(true);
     }
 
-    webgazer.showVideoPreview(true);
-    webgazer.showFaceOverlay(true);
-    webgazer.showFaceFeedbackBox(true);
-    webgazer.showPredictionPoints(true);
+    webgazer.showVideo(false).showPredictionPoints(true);
 
     document.getElementById("game-area").style.display = "block";
     spawnPoint();
@@ -562,19 +564,19 @@
       t.classList.remove("fish-red");
       t.classList.add("fish-blue");
       canClick = true;
-    }, 700);
+    }, 600);
 
     t.onclick = () => {
       if (!canClick) return;
 
       clickCount++;
-      if (clickCount >= 5) {
+      if (clickCount >= 3) {
         clickCount = 0;
         currentPointIndex++;
         canClick = false;
         spawnPoint();
       } else {
-        t.style.transform = `translate(-50%, -50%) scale(${1 + clickCount * 0.2})`;
+        t.style.transform = `translate(-50%, -50%) scale(${1 + clickCount * 0.3})`;
       }
     };
 
@@ -610,10 +612,12 @@
     const targetY = stageBox.top + (stageBox.height / 2);
 
     const checkInterval = setInterval(() => {
-      samples.push(Math.sqrt(
-        Math.pow(currentGaze.x - targetX, 2) +
-        Math.pow(currentGaze.y - targetY, 2)
-      ));
+      samples.push(
+        Math.sqrt(
+          Math.pow(currentGaze.x - targetX, 2) +
+          Math.pow(currentGaze.y - targetY, 2)
+        )
+      );
     }, 100);
 
     setTimeout(() => {
@@ -632,7 +636,7 @@
       } else {
         showVictoryPopup();
       }
-    }, 4500);
+    }, 4000);
   }
 
   function showVictoryPopup() {
@@ -648,9 +652,6 @@
 
     if (window.webgazer) {
       webgazer.showPredictionPoints(false);
-      webgazer.showVideoPreview(false);
-      webgazer.showFaceOverlay(false);
-      webgazer.showFaceFeedbackBox(false);
     }
 
     showVideoLoading("Loading video...");
@@ -683,9 +684,7 @@
 
       if (waited >= maxWaitMs) {
         clearInterval(timer);
-        setVideoDebug(
-          `Timeout. apiLoaded=${youtubeApiLoaded}, playerExists=${!!player}, playerReady=${youtubePlayerReady}, ytId=${YT_ID}`
-        );
+        setVideoDebug(`Timeout. apiLoaded=${youtubeApiLoaded}, playerExists=${!!player}, playerReady=${youtubePlayerReady}, ytId=${YT_ID}`);
         showVideoLoading("Video failed to load");
         showVideoError("The YouTube player was not ready in time. Check the video ID and whether embedding is allowed.");
       }
