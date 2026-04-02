@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <title>Bird Study: Research Grade Logger</title>
-  <script src="https://www.youtube.com/iframe_api"></script>
   <script src="https://cdn.jsdelivr.net/npm/webgazer@2.1.1/dist/webgazer.min.js"></script>
 
   <style>
@@ -116,6 +115,7 @@
     #video-area, #player {
       width: 100%;
       height: 100%;
+      background: #000;
     }
 
     #game-instr {
@@ -208,6 +208,15 @@
       font-weight: normal;
       max-width: 80%;
     }
+
+    #video-debug {
+      margin-top: 12px;
+      font-size: 14px;
+      color: #444;
+      font-weight: normal;
+      max-width: 85%;
+      line-height: 1.4;
+    }
   </style>
 </head>
 <body>
@@ -246,6 +255,7 @@
       <div class="spinner"></div>
       <div id="video-loading-text">Loading video...</div>
       <div id="video-error"></div>
+      <div id="video-debug"></div>
     </div>
   </div>
 
@@ -278,24 +288,10 @@
   document.getElementById("disp-pid").innerText = PID;
 
   let csvData = [[
-    "timestamp",
-    "session_id",
-    "participant_id",
-    "video_id",
-    "youtube_id",
-    "video_time",
-    "gaze_x",
-    "gaze_y",
-    "on_screen",
-    "face_detected",
-    "face_centered",
-    "face_count",
-    "face_width",
-    "face_height",
-    "detection_confidence",
-    "head_symmetry",
-    "calibration_score",
-    "manual_engagement"
+    "timestamp", "session_id", "participant_id", "video_id", "youtube_id", "video_time",
+    "gaze_x", "gaze_y", "on_screen", "face_detected", "face_centered", "face_count",
+    "face_width", "face_height", "detection_confidence", "head_symmetry",
+    "calibration_score", "manual_engagement"
   ]];
 
   let currentGaze = { x: 0, y: 0 };
@@ -310,10 +306,26 @@
   let canClick = false;
   let isBonusRound = false;
   let logInterval = null;
+  let youtubeApiLoaded = false;
   let youtubePlayerReady = false;
+  let youtubeScriptInjected = false;
 
-  const points = [[15,15],[85,15],[50,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
-  const bonusPoints = [[12,12],[88,12],[12,88],[88,88]];
+  const points = [
+    [10,10],[50,10],[90,10],
+    [10,30],[50,30],[90,30],
+    [10,50],[50,50],[90,50],
+    [10,70],[50,70],[90,70],
+    [10,90],[50,90],[90,90]
+  ];
+
+  const bonusPoints = [
+    [20,20],[80,20],[20,80],[80,80],[50,50]
+  ];
+
+  function setVideoDebug(msg) {
+    document.getElementById("video-debug").innerText = msg;
+    console.log(msg);
+  }
 
   function showVideoLoading(message = "Loading video...") {
     document.getElementById("video-loading-text").innerText = message;
@@ -331,6 +343,72 @@
     err.style.display = "block";
   }
 
+  function loadYouTubeApi() {
+    if (youtubeScriptInjected) return;
+    youtubeScriptInjected = true;
+
+    setVideoDebug("Injecting YouTube API script...");
+
+    const script = document.createElement("script");
+    script.src = "https://www.youtube.com/iframe_api";
+    script.async = true;
+    script.onload = () => setVideoDebug("YouTube API script loaded.");
+    script.onerror = () => {
+      setVideoDebug("Failed to load YouTube API script.");
+      showVideoError("Could not load the YouTube API script.");
+    };
+    document.head.appendChild(script);
+  }
+
+  globalThis.onYouTubeIframeAPIReady = function () {
+    youtubeApiLoaded = true;
+    setVideoDebug("YouTube API callback fired.");
+
+    player = new YT.Player("player", {
+      videoId: YT_ID,
+      width: "100%",
+      height: "100%",
+      playerVars: {
+        controls: 0,
+        disablekb: 1,
+        rel: 0,
+        modestbranding: 1,
+        playsinline: 1
+      },
+      events: {
+        onReady: function () {
+          youtubePlayerReady = true;
+          setVideoDebug("YouTube player ready.");
+        },
+        onStateChange: function (e) {
+          setVideoDebug("YouTube state changed: " + e.data);
+
+          if (e.data === YT.PlayerState.PLAYING) {
+            hideVideoLoading();
+
+            if (!isRecording) isRecording = true;
+            if (!logInterval) logInterval = setInterval(logRow, 1000);
+          }
+
+          if (e.data === YT.PlayerState.BUFFERING) {
+            showVideoLoading("Buffering video...");
+          }
+
+          if (e.data === YT.PlayerState.ENDED) {
+            terminateSession();
+          }
+        },
+        onError: function (e) {
+          setVideoDebug("YouTube error code: " + e.data);
+          showVideoLoading("Unable to play video");
+          showVideoError(
+            "YouTube error code: " + e.data + ". This often means the video ID is invalid or embedding is disabled for that video."
+          );
+        }
+      }
+    });
+  };
+
   window.addEventListener("keydown", (e) => {
     const display = document.getElementById("manual-status");
     if (e.key === "ArrowUp") {
@@ -343,63 +421,6 @@
       display.className = "status-off";
     }
   });
-
-  // IMPORTANT FIX: must be global for YouTube API
-  globalThis.onYouTubeIframeAPIReady = function() {
-    console.log("YouTube API ready");
-
-    player = new YT.Player("player", {
-      videoId: YT_ID,
-      playerVars: {
-        controls: 0,
-        disablekb: 1,
-        rel: 0,
-        modestbranding: 1
-      },
-      events: {
-        onReady: function() {
-          console.log("YouTube player ready");
-          youtubePlayerReady = true;
-        },
-        onStateChange: function(e) {
-          console.log("YouTube state:", e.data);
-
-          // PLAYING
-          if (e.data === YT.PlayerState.PLAYING) {
-            hideVideoLoading();
-
-            if (!isRecording) {
-              isRecording = true;
-            }
-
-            if (!logInterval) {
-              logInterval = setInterval(logRow, 1000);
-            }
-          }
-
-          // ENDED
-          if (e.data === YT.PlayerState.ENDED) {
-            terminateSession();
-          }
-
-          // BUFFERING
-          if (e.data === YT.PlayerState.BUFFERING) {
-            showVideoLoading("Buffering video...");
-          }
-
-          // CUED
-          if (e.data === YT.PlayerState.CUED) {
-            console.log("Video cued");
-          }
-        },
-        onError: function(e) {
-          console.error("YouTube player error:", e.data);
-          showVideoLoading("Unable to play video");
-          showVideoError("YouTube returned an error code: " + e.data);
-        }
-      }
-    });
-  };
 
   async function init() {
     try {
@@ -416,7 +437,11 @@
       });
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user" }
+        video: {
+          facingMode: "user",
+          width: { ideal: 640 },
+          height: { ideal: 480 }
+        }
       });
 
       const camVideo = document.getElementById("camVideo");
@@ -427,6 +452,7 @@
       document.getElementById("startBtn").style.display = "block";
 
       startFaceLoop();
+      loadYouTubeApi();
     } catch (err) {
       document.getElementById("init-msg").innerText = "❌ Init failed: " + err.message;
     }
@@ -445,14 +471,8 @@
           let symmetry = 1.0;
 
           if (d.keypoints && d.keypoints.length >= 3) {
-            const distR = Math.hypot(
-              d.keypoints[2].x - d.keypoints[0].x,
-              d.keypoints[2].y - d.keypoints[0].y
-            );
-            const distL = Math.hypot(
-              d.keypoints[2].x - d.keypoints[1].x,
-              d.keypoints[2].y - d.keypoints[1].y
-            );
+            const distR = Math.hypot(d.keypoints[2].x - d.keypoints[0].x, d.keypoints[2].y - d.keypoints[0].y);
+            const distL = Math.hypot(d.keypoints[2].x - d.keypoints[1].x, d.keypoints[2].y - d.keypoints[1].y);
             symmetry = Math.min(distL, distR) / Math.max(distL, distR);
           }
 
@@ -469,15 +489,7 @@
           document.getElementById("dbgFace").innerText = "YES";
           document.getElementById("dbgSym").innerText = faceState.symmetry;
         } else {
-          faceState = {
-            detected: 0,
-            centered: 0,
-            count: 0,
-            width: 0,
-            height: 0,
-            confidence: 0,
-            symmetry: 0
-          };
+          faceState = { detected: 0, centered: 0, count: 0, width: 0, height: 0, confidence: 0, symmetry: 0 };
           document.getElementById("dbgFace").innerText = "NO";
           document.getElementById("dbgSym").innerText = "--";
         }
@@ -489,7 +501,7 @@
     detect();
   }
 
-  window.initExperience = async function() {
+  window.initExperience = async function () {
     document.getElementById("overlay").style.display = "none";
 
     await webgazer
@@ -502,7 +514,14 @@
       })
       .begin();
 
-    webgazer.showVideo(false).showPredictionPoints(true);
+    if (webgazer.applyKalmanFilter) {
+      webgazer.applyKalmanFilter(true);
+    }
+
+    webgazer.showVideoPreview(true);
+    webgazer.showFaceOverlay(true);
+    webgazer.showFaceFeedbackBox(true);
+    webgazer.showPredictionPoints(true);
 
     document.getElementById("game-area").style.display = "block";
     spawnPoint();
@@ -527,11 +546,8 @@
     const activePoints = isBonusRound ? bonusPoints : points;
 
     if (currentPointIndex >= activePoints.length) {
-      if (!isBonusRound) {
-        triggerCountdown();
-      } else {
-        showVictoryPopup();
-      }
+      if (!isBonusRound) triggerCountdown();
+      else showVictoryPopup();
       return;
     }
 
@@ -546,19 +562,19 @@
       t.classList.remove("fish-red");
       t.classList.add("fish-blue");
       canClick = true;
-    }, 600);
+    }, 700);
 
     t.onclick = () => {
       if (!canClick) return;
 
       clickCount++;
-      if (clickCount >= 3) {
+      if (clickCount >= 5) {
         clickCount = 0;
         currentPointIndex++;
         canClick = false;
         spawnPoint();
       } else {
-        t.style.transform = `translate(-50%, -50%) scale(${1 + clickCount * 0.3})`;
+        t.style.transform = `translate(-50%, -50%) scale(${1 + clickCount * 0.2})`;
       }
     };
 
@@ -573,11 +589,9 @@
     let c = 3;
     const itv = setInterval(() => {
       c--;
-      if (c > 0) {
-        cd.innerText = c;
-      } else if (c === 0) {
-        cd.innerText = "STARE!";
-      } else {
+      if (c > 0) cd.innerText = c;
+      else if (c === 0) cd.innerText = "STARE!";
+      else {
         clearInterval(itv);
         cd.style.display = "none";
         startBoss();
@@ -596,12 +610,10 @@
     const targetY = stageBox.top + (stageBox.height / 2);
 
     const checkInterval = setInterval(() => {
-      samples.push(
-        Math.sqrt(
-          Math.pow(currentGaze.x - targetX, 2) +
-          Math.pow(currentGaze.y - targetY, 2)
-        )
-      );
+      samples.push(Math.sqrt(
+        Math.pow(currentGaze.x - targetX, 2) +
+        Math.pow(currentGaze.y - targetY, 2)
+      ));
     }, 100);
 
     setTimeout(() => {
@@ -620,7 +632,7 @@
       } else {
         showVictoryPopup();
       }
-    }, 4000);
+    }, 4500);
   }
 
   function showVictoryPopup() {
@@ -629,37 +641,41 @@
     document.getElementById("victory-modal").style.display = "block";
   }
 
-  window.closeVictory = function() {
+  window.closeVictory = function () {
     document.getElementById("victory-modal").style.display = "none";
     document.getElementById("game-area").style.display = "none";
     document.getElementById("video-area").style.display = "block";
 
     if (window.webgazer) {
       webgazer.showPredictionPoints(false);
+      webgazer.showVideoPreview(false);
+      webgazer.showFaceOverlay(false);
+      webgazer.showFaceFeedbackBox(false);
     }
 
     showVideoLoading("Loading video...");
-
     startVideoSafely();
   };
 
   function startVideoSafely() {
-    const maxWaitMs = 8000;
+    const maxWaitMs = 12000;
     const intervalMs = 250;
     let waited = 0;
 
+    setVideoDebug("Waiting for YouTube player readiness...");
+
     const timer = setInterval(() => {
-      if (player && youtubePlayerReady && typeof player.playVideo === "function") {
+      if (player && youtubeApiLoaded && youtubePlayerReady && typeof player.playVideo === "function") {
         clearInterval(timer);
 
         try {
+          setVideoDebug("Calling playVideo()...");
           player.playVideo();
         } catch (err) {
-          console.error("Error starting video:", err);
+          setVideoDebug("playVideo() failed: " + err.message);
           showVideoLoading("Unable to start video");
           showVideoError("The player exists, but playVideo() failed.");
         }
-
         return;
       }
 
@@ -667,9 +683,11 @@
 
       if (waited >= maxWaitMs) {
         clearInterval(timer);
-        console.error("Timed out waiting for YouTube player");
+        setVideoDebug(
+          `Timeout. apiLoaded=${youtubeApiLoaded}, playerExists=${!!player}, playerReady=${youtubePlayerReady}, ytId=${YT_ID}`
+        );
         showVideoLoading("Video failed to load");
-        showVideoError("The YouTube player was not ready in time. Check whether embedding is allowed for this video.");
+        showVideoError("The YouTube player was not ready in time. Check the video ID and whether embedding is allowed.");
       }
     }, intervalMs);
   }
@@ -683,9 +701,7 @@
       const ny = (currentGaze.y - stage.top) / stage.height;
 
       let vTime = -1;
-      try {
-        vTime = player.getCurrentTime();
-      } catch (e) {}
+      try { vTime = player.getCurrentTime(); } catch (e) {}
 
       csvData.push([
         new Date().toISOString(),
@@ -712,7 +728,7 @@
     }
   }
 
-  window.terminateSession = function() {
+  window.terminateSession = function () {
     if (logInterval) {
       clearInterval(logInterval);
       logInterval = null;
