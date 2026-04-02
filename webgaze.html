@@ -77,7 +77,7 @@
     const params = new URLSearchParams(window.location.search);
     const PID = params.get("pid") || "P001";
     const VID = params.get("vid") || "V01";
-    const YT_ID = params.get("yt") || "905QNpTukIU"; // This will take your LX9u2D3kGyo
+    const YT_ID = params.get("yt") || "905QNpTukIU";
     const SESSION_ID = generateSessionId();
     document.getElementById('disp-pid').innerText = PID;
 
@@ -90,7 +90,7 @@
     const points = [[15,15],[85,15],[50,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
     const bonusPoints = [[12,12], [88,12], [12,88], [88,88]];
 
-    // --- MEDIAPIPE INIT ---
+    // --- MEDIAPIPE INIT (MATCHING YOUR WORKING REFERENCE) ---
     async function init() {
         try {
             const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
@@ -199,30 +199,52 @@
         document.getElementById('victory-modal').style.display = 'block';
     }
 
-    // --- CRITICAL VIDEO FIX HERE ---
+    // --- TRANSITION & LOGGING ---
     window.closeVictory = function() {
+        console.log("Starting Video and Logger...");
         document.getElementById('game-area').style.display = 'none';
         document.getElementById('video-area').style.display = 'block';
-        webgazer.showPredictionPoints(false);
+        if (window.webgazer) webgazer.showPredictionPoints(false);
         
-        // Ensure the player is ready before playing
         if (player && typeof player.playVideo === 'function') {
             player.playVideo();
             isRecording = true;
-            setInterval(logRow, 1000);
+            
+            // Explicitly start the logging interval here
+            const loggingLoop = setInterval(() => {
+                if (!isRecording) {
+                    clearInterval(loggingLoop);
+                    return;
+                }
+                logRow();
+            }, 1000);
         } else {
-            console.error("YouTube Player not ready yet.");
-            // Fallback: try to re-init player if it failed
-            onYouTubeIframeAPIReady(); 
+            alert("YouTube Player not ready. Try clicking again in 2 seconds.");
+            if (!player) onYouTubeIframeAPIReady(); 
         }
     };
 
     function logRow() {
         if (!isRecording || !player) return;
-        const stage = document.getElementById('stage').getBoundingClientRect();
-        const nx = (currentGaze.x - stage.left) / stage.width;
-        const ny = (currentGaze.y - stage.top) / stage.height;
-        csvData.push([new Date().toISOString(), SESSION_ID, PID, VID, YT_ID, player.getCurrentTime().toFixed(3), nx.toFixed(4), ny.toFixed(4), (nx >= 0 && nx <= 1 ? 1 : 0), faceState.detected, faceState.centered, faceState.count, faceState.width, faceState.height, faceState.confidence, faceState.symmetry, finalAccuracy.toFixed(1)]);
+        try {
+            const stage = document.getElementById('stage').getBoundingClientRect();
+            const nx = (currentGaze.x - stage.left) / stage.width;
+            const ny = (currentGaze.y - stage.top) / stage.height;
+            
+            let vTime = 0;
+            try { vTime = player.getCurrentTime(); } catch(e) { vTime = -1; }
+
+            const row = [
+                new Date().toISOString(), SESSION_ID, PID, VID, YT_ID,
+                vTime.toFixed(3), nx.toFixed(4), ny.toFixed(4),
+                (nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1 ? 1 : 0),
+                faceState.detected, faceState.centered, faceState.count,
+                faceState.width, faceState.height, faceState.confidence, faceState.symmetry,
+                finalAccuracy.toFixed(1)
+            ];
+            csvData.push(row);
+            if (csvData.length % 5 === 0) console.log(`Data Collection: ${csvData.length - 1} samples captured.`);
+        } catch (err) { console.error("Logging Error:", err); }
     }
 
     window.terminateSession = function() {
@@ -236,19 +258,12 @@
         link.click();
     };
 
-    // Make sure this is globally available for the YouTube script to find
     window.onYouTubeIframeAPIReady = function() {
         player = new YT.Player('player', {
             videoId: YT_ID,
-            playerVars: { 
-                'controls': 0, 
-                'disablekb': 1, 
-                'rel': 0, 
-                'modestbranding': 1,
-                'autoplay': 0 // We trigger play manually after calibration
-            },
+            playerVars: { 'controls': 0, 'disablekb': 1, 'rel': 0, 'modestbranding': 1 },
             events: {
-                'onReady': (event) => console.log("YouTube Ready"),
+                'onReady': () => console.log("YT Player Loaded"),
                 'onStateChange': (e) => { if(e.data === 0) terminateSession(); }
             }
         });
