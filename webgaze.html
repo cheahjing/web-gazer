@@ -10,17 +10,25 @@
         #app-viewport { position: relative; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
         #stage { position: relative; width: 85%; height: 80%; background: #ffffff; border: 8px solid #0077be; border-radius: 25px; z-index: 10; overflow: hidden; }
         #webgazerGazeDot { z-index: 2147483647 !important; border: 2px solid white !important; }
+        
         .fish-target { position: absolute; display: flex !important; align-items: center; justify-content: center; width: 120px; height: 120px; transform: translate(-50%, -50%); font-size: 70px; z-index: 1000; transition: filter 0.2s, transform 0.2s; cursor: default; background: transparent !important; outline: none !important; user-select: none; }
         .fish-red { filter: grayscale(1) sepia(1) saturate(8) hue-rotate(-50deg); opacity: 0.7; }
         .fish-blue { filter: none; opacity: 1; cursor: pointer; }
+        
         #boss-fish { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 140px; z-index: 1200; display: none; opacity: 0; pointer-events: none; }
         .boss-active { display: flex !important; opacity: 1 !important; }
+        
         #countdown-overlay { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(255,255,255,0.8); z-index: 1500; font-size: 150px; color: #ff4444; font-weight: bold; }
+        
         #victory-modal { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border: 10px solid #ffd700; border-radius: 30px; padding: 40px; text-align: center; z-index: 2000; display: none; box-shadow: 0 20px 50px rgba(0,0,0,0.2); }
-        #video-area, #player { width: 100%; height: 100%; }
+        
+        #video-area, #player { width: 100%; height: 100%; border: none; }
         #game-instr { position: absolute; top: 15px; width: 100%; text-align: center; font-size: 24px; color: #0077be; z-index: 1100; font-weight: bold; }
+        
         #debug-bar { position: fixed; top: 0; width: 100%; background: #333; color: white; padding: 10px 20px; z-index: 2147483646; display: flex; gap: 20px; font-family: monospace; font-size: 11px; align-items: center;}
-        .status-on { color: #00ff00; font-weight: bold; } .status-off { color: #ff4444; font-weight: bold; }
+        .status-on { color: #00ff00; font-weight: bold; } 
+        .status-off { color: #ff4444; font-weight: bold; }
+        
         #overlay { position: fixed; inset: 0; background: #ffffff; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2147483645; text-align: center; }
         #camVideo { display: none; }
     </style>
@@ -48,11 +56,12 @@
                 <div style="font-size: 100px;">🏆</div>
                 <h2>GREAT JOB!</h2>
                 <p style="font-size: 24px;">Quality Score: <b id="final-score-display">--</b>%</p>
-                <button onclick="closeVictory()" style="padding: 15px 40px; background: #ffd700; border: none; border-radius: 20px; font-weight: bold; cursor: pointer;">WATCH BIRDS 🐦</button>
+                <button id="finalVideoBtn" onclick="closeVictory()" style="padding: 15px 40px; background: #ffd700; border: none; border-radius: 20px; font-weight: bold; cursor: pointer;">WATCH BIRDS 🐦</button>
             </div>
         </div>
         <div id="video-area" style="display:none;"><div id="player"></div></div>
     </div>
+    
     <div id="overlay">
         <h1>🌊 Research Session</h1>
         <p id="init-msg">Initializing Trackers...</p>
@@ -90,23 +99,33 @@
     const points = [[15,15],[85,15],[50,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
     const bonusPoints = [[12,12], [88,12], [12,88], [88,88]];
 
-    // Manual Engagement Handler
+    // Manual Tracker Keys
     window.addEventListener('keydown', (e) => {
         const display = document.getElementById('manual-status');
         if (e.key === "ArrowUp") { manualEngagement = 1; display.innerText = "ENGAGED (↑)"; display.className = "status-on"; }
         else if (e.key === "ArrowDown") { manualEngagement = 0; display.innerText = "LOOKED AWAY (↓)"; display.className = "status-off"; }
     });
 
-    // YouTube API Setup
+    // YouTube Setup
     window.onYouTubeIframeAPIReady = function() {
         player = new YT.Player('player', {
             videoId: YT_ID,
-            playerVars: { 'controls': 0, 'disablekb': 1, 'rel': 0, 'modestbranding': 1 },
-            events: { 'onStateChange': (e) => { if(e.data === 0) terminateSession(); } }
+            playerVars: { 
+                'controls': 0, 
+                'disablekb': 1, 
+                'rel': 0, 
+                'modestbranding': 1,
+                'autoplay': 1,
+                'mute': 0 
+            },
+            events: { 
+                'onReady': (e) => console.log("YT Player Loaded and Ready."),
+                'onStateChange': (e) => { if(e.data === 0) terminateSession(); } 
+            }
         });
     };
 
-    // RESTORED WORKING MEDIAPIPE PATTERN
+    // Working MediaPipe Init Pattern
     async function init() {
         try {
             const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
@@ -115,13 +134,14 @@
                 runningMode: "VIDEO", minDetectionConfidence: 0.5
             });
             const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-            const camVideo = document.getElementById("camVideo");
-            camVideo.srcObject = stream;
-            await camVideo.play();
+            document.getElementById("camVideo").srcObject = stream;
             document.getElementById('init-msg').innerText = "Trackers Ready.";
             document.getElementById('startBtn').style.display = "block";
             startFaceLoop();
-        } catch (err) { document.getElementById('init-msg').innerText = "❌ Init failed: " + err.message; }
+        } catch (err) { 
+            console.error("MediaPipe Init Error:", err);
+            document.getElementById('init-msg').innerText = "❌ Tracking Error. Please refresh."; 
+        }
     }
 
     function startFaceLoop() {
@@ -212,14 +232,27 @@
         document.getElementById('victory-modal').style.display = 'block';
     }
 
+    // --- TRANSITION FIX ---
     window.closeVictory = function() {
+        console.log("Attempting to start Video...");
+        
+        // 1. Hide Game Elements
         document.getElementById('game-area').style.display = 'none';
+        document.getElementById('victory-modal').style.display = 'none';
+        
+        // 2. Show Video Area
         document.getElementById('video-area').style.display = 'block';
         if (window.webgazer) webgazer.showPredictionPoints(false);
+        
+        // 3. Play Video with fallback
         if (player && typeof player.playVideo === 'function') {
+            player.unMute();
             player.playVideo();
             isRecording = true;
             setInterval(logRow, 1000);
+        } else {
+            console.error("YouTube Player not ready yet. Retrying in 1s...");
+            setTimeout(window.closeVictory, 1000);
         }
     };
 
@@ -249,19 +282,17 @@
         if(window.webgazer) webgazer.pause();
         const csvContent = csvData.map(e => e.join(",")).join("\n");
         
-        // Named for child/video/session
         const blob = new Blob([csvContent], { type: 'text/csv' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
         link.download = `${FULL_FILENAME}.csv`;
         link.click();
 
-        // Pass full filename to G-Drive script
         fetch(SCRIPT_URL, {
             method: 'POST',
             mode: 'no-cors',
             body: csvContent
-        }).then(() => alert("Saved as: " + FULL_FILENAME));
+        }).then(() => alert("Data saved to Drive as: " + FULL_FILENAME));
     };
 
     init();
