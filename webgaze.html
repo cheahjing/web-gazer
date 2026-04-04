@@ -339,6 +339,7 @@
   let webcamChunks = [];
   let webcamMimeType = "";
   let webcamUploadAttempted = false;
+  let csvSaved = false;
 
   const points = [[15,15],[85,15],[50,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
   const bonusPoints = [[12,12], [88,12], [12,88], [88,88]];
@@ -430,6 +431,25 @@
       console.error("Webcam upload failed", err);
       alert("Webcam recording was saved locally, but Drive upload failed: " + err.message);
     }
+  }
+
+  function saveCsvResults() {
+    if (csvSaved) return;
+    csvSaved = true;
+
+    const csvContent = csvData.map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    downloadBlob(blob, `${FULL_FILENAME}.csv`);
+
+    fetch(SCRIPT_URL, {
+      method: "POST",
+      mode: "no-cors",
+      body: csvContent
+    }).then(() => {
+      console.log("CSV upload sent for " + FULL_FILENAME);
+    }).catch((err) => {
+      console.error("CSV upload failed", err);
+    });
   }
 
   function stopWebcamRecordingInternal() {
@@ -562,6 +582,7 @@
               clearInterval(logInterval);
               logInterval = null;
             }
+            saveCsvResults();
             setVideoDebug("Video ended. Webcam recording remains active until the researcher stops it.");
           }
         },
@@ -608,7 +629,11 @@
           height: { ideal: 480 },
           frameRate: { ideal: 15, max: 15 }
         },
-        audio: false
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
       });
       cameraStream = stream;
 
@@ -903,18 +928,8 @@
       webgazer.pause();
     }
 
-    const csvContent = csvData.map(e => e.join(",")).join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    downloadBlob(blob, `${FULL_FILENAME}.csv`);
-
-    fetch(SCRIPT_URL, {
-      method: "POST",
-      mode: "no-cors",
-      body: csvContent
-    }).then(() => {
-      alert("Saved as: " + FULL_FILENAME);
-    });
+    saveCsvResults();
+    alert("Saved as: " + FULL_FILENAME);
   };
 
   init();
