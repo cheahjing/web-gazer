@@ -226,10 +226,12 @@
   <span>Gaze: <span id="disp-screen" class="status-off">OUT</span></span>
   <span>FACE: <span id="dbgFace">--</span></span>
   <span>SYM: <span id="dbgSym">--</span></span>
+  <span>CAM: <span id="cam-recording-status" class="status-off">IDLE</span></span>
   <span style="border-left: 1px solid #666; padding-left: 10px;">
     MANUAL: <span id="manual-status" class="status-on">ENGAGED (↑)</span>
   </span>
   <button onclick="terminateSession()" style="margin-left:auto; cursor:pointer; background:#ff4444; color:white; border:none; padding:4px 12px; border-radius:4px; font-weight:bold;">⏹ Stop & Save</button>
+  <button id="stop-webcam-btn" onclick="stopWebcamRecording()" style="display:none; cursor:pointer; background:#ff9800; color:white; border:none; padding:4px 12px; border-radius:4px; font-weight:bold;">Stop Webcam</button>
 </div>
 
 <div id="app-viewport">
@@ -289,6 +291,7 @@
   const PID = params.get("pid") || "P001";
   const VID = params.get("vid") || "V01";
   const YT_ID = params.get("yt") || "905QNpTukIU";
+  const DRIVE_FOLDER_ID = params.get("driveFolderId") || "";
   const SESSION_ID = generateSessionId();
   const FULL_FILENAME = `${PID}_${VID}_${SESSION_ID}`;
 
@@ -320,6 +323,7 @@
   let manualEngagement = 1;
   let player = null;
   let isRecording = false;
+  let hasVideoStarted = false;
   let faceDetector = null;
   let finalAccuracy = 0;
   let currentPointIndex = 0;
@@ -330,6 +334,11 @@
   let youtubeApiLoaded = false;
   let youtubePlayerReady = false;
   let youtubeScriptInjected = false;
+  let cameraStream = null;
+  let webcamRecorder = null;
+  let webcamChunks = [];
+  let webcamMimeType = "";
+  let webcamUploadAttempted = false;
 
   const points = [[15,15],[85,15],[50,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
   const bonusPoints = [[12,12], [88,12], [12,88], [88,88]];
@@ -337,6 +346,144 @@
   function setVideoDebug(msg) {
     document.getElementById("video-debug").innerText = msg;
     console.log(msg);
+  }
+
+  function setCameraRecordingStatus(label, isActive) {
+    const el = document.getElementById("cam-recording-status");
+    el.innerText = label;
+    el.className = isActive ? "status-on" : "status-off";
+  }
+
+  function getSupportedRecorderMimeType() {
+    if (!globalThis.MediaRecorder) return "";
+
+    const preferredTypes = [
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8,opus",
+      "video/webm",
+      "video/mp4"
+    ];
+
+    return preferredTypes.find(type => MediaRecorder.isTypeSupported(type)) || "";
+  }
+
+  function downloadBlob(blob, filename) {
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  }
+
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = String(reader.result || "");
+        resolve(result.split(",")[1] || "");
+      };
+      reader.onerror = () => reject(reader.error || new Error("Failed to read blob."));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function uploadWebcamToAppsScript(blob, extension) {
+    const base64Data = await blobToBase64(blob);
+
+    const payload = {
+      kind: "webcam_video",
+      fileName: `${FULL_FILENAME}_webcam.${extension}`,
+      mimeType: blob.type || "video/webm",
+      participantId: PID,
+      videoId: VID,
+      sessionId: SESSION_ID,
+      youtubeId: YT_ID,
+      driveFolderId: DRIVE_FOLDER_ID,
+      dataBase64: base64Data
+    };
+
+    await fetch(SCRIPT_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async function saveWebcamRecording() {
+    if (!webcamChunks.length) return;
+
+    const extension = webcamMimeType.includes("mp4") ? "mp4" : "webm";
+    const blob = new Blob(webcamChunks, { type: webcamMimeType || "video/webm" });
+    downloadBlob(blob, `${FULL_FILENAME}_webcam.${extension}`);
+
+    if (!DRIVE_FOLDER_ID || webcamUploadAttempted) return;
+
+    webcamUploadAttempted = true;
+
+    try {
+      await uploadWebcamToAppsScript(blob, extension);
+      alert("Webcam recording saved locally and upload was sent to Google Drive.");
+    } catch (err) {
+      console.error("Webcam upload failed", err);
+      alert("Webcam recording was saved locally, but Drive upload failed: " + err.message);
+    }
+  }
+
+  function stopWebcamRecordingInternal() {
+    if (webcamRecorder && webcamRecorder.state !== "inactive") {
+      webcamRecorder.stop();
+      return true;
+    }
+    return false;
+  }
+
+  window.stopWebcamRecording = function () {
+    const stopped = stopWebcamRecordingInternal();
+    if (!stopped) {
+      alert("Webcam recording is not active.");
+    }
+  };
+
+  function startWebcamRecording() {
+    if (!cameraStream || webcamRecorder?.state === "recording") return;
+
+    webcamMimeType = getSupportedRecorderMimeType();
+    webcamChunks = [];
+
+    try {
+      webcamRecorder = webcamMimeType
+        ? new MediaRecorder(cameraStream, { mimeType: webcamMimeType })
+        : new MediaRecorder(cameraStream);
+    } catch (err) {
+      console.error("Unable to create MediaRecorder", err);
+      setCameraRecordingStatus("UNAVAILABLE", false);
+      alert("Webcam recording could not start in this browser: " + err.message);
+      return;
+    }
+
+    webcamRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        webcamChunks.push(event.data);
+      }
+    };
+
+    webcamRecorder.onerror = (event) => {
+      console.error("Webcam recorder error", event);
+      setCameraRecordingStatus("ERROR", false);
+    };
+
+    webcamRecorder.onstop = async () => {
+      setCameraRecordingStatus("STOPPED", false);
+      document.getElementById("stop-webcam-btn").style.display = "none";
+      await saveWebcamRecording();
+    };
+
+    webcamRecorder.start(1000);
+    setCameraRecordingStatus("REC", true);
+    document.getElementById("stop-webcam-btn").style.display = "inline-block";
   }
 
   function showVideoLoading(message = "Loading video...") {
@@ -397,6 +544,10 @@
 
           if (e.data === YT.PlayerState.PLAYING) {
             hideVideoLoading();
+            if (!hasVideoStarted) {
+              hasVideoStarted = true;
+              startWebcamRecording();
+            }
             if (!isRecording) isRecording = true;
             if (!logInterval) logInterval = setInterval(logRow, 1000);
           }
@@ -406,7 +557,12 @@
           }
 
           if (e.data === YT.PlayerState.ENDED) {
-            terminateSession();
+            isRecording = false;
+            if (logInterval) {
+              clearInterval(logInterval);
+              logInterval = null;
+            }
+            setVideoDebug("Video ended. Webcam recording remains active until the researcher stops it.");
           }
         },
         onError: function (e) {
@@ -446,8 +602,15 @@
       });
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user" }
+        video: {
+          facingMode: "user",
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          frameRate: { ideal: 15, max: 15 }
+        },
+        audio: false
       });
+      cameraStream = stream;
 
       const camVideo = document.getElementById("camVideo");
       camVideo.srcObject = stream;
@@ -734,6 +897,7 @@
     }
 
     isRecording = false;
+    stopWebcamRecordingInternal();
 
     if (window.webgazer) {
       webgazer.pause();
@@ -742,10 +906,7 @@
     const csvContent = csvData.map(e => e.join(",")).join("\n");
 
     const blob = new Blob([csvContent], { type: "text/csv" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `${FULL_FILENAME}.csv`;
-    link.click();
+    downloadBlob(blob, `${FULL_FILENAME}.csv`);
 
     fetch(SCRIPT_URL, {
       method: "POST",
