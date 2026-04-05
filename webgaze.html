@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Bird Study: Research Grade Logger</title>
+  <title>EduContent: Attention Tracker</title>
   <script src="https://cdn.jsdelivr.net/npm/webgazer@2.1.1/dist/webgazer.min.js"></script>
 
   <style>
@@ -237,14 +237,14 @@
 <div id="app-viewport">
   <div id="stage">
     <div id="game-area" style="display:none; width:100%; height:100%; background:#ffffff; position:relative;">
-      <div id="game-instr">Wait for Blue... then catch it!</div>
+      <div id="game-instr">Wait for the Blue Fish... then catch it!</div>
       <div id="countdown-overlay">3</div>
       <div id="boss-fish">🦑</div>
 
       <div id="victory-modal">
         <div style="font-size: 100px;">🏆</div>
         <h2>GREAT JOB!</h2>
-        <p style="font-size: 24px;">Quality Score: <b id="final-score-display">--</b>%</p>
+        <p style="font-size: 24px;">Score: <b id="final-score-display">--</b>%</p>
         <button onclick="closeVictory()" style="padding: 15px 40px; background: #ffd700; border: none; border-radius: 20px; font-weight: bold; cursor: pointer;">WATCH BIRDS 🐦</button>
       </div>
     </div>
@@ -262,7 +262,7 @@
   </div>
 
   <div id="overlay">
-    <h1>🌊 Research Session</h1>
+    <h1>🌊 EduContent Session</h1>
     <p id="init-msg">Initializing Trackers...</p>
     <button id="startBtn" onclick="initExperience()" style="display:none; padding:20px 60px; font-size:1.5rem; cursor:pointer; background:#0077be; color:white; border:none; border-radius:50px; font-weight:bold;">START</button>
   </div>
@@ -292,6 +292,8 @@
   const VID = params.get("vid") || "V01";
   const YT_ID = params.get("yt") || "905QNpTukIU";
   const DRIVE_FOLDER_ID = params.get("driveFolderId") || "";
+  const CSV_FOLDER_ID = params.get("csvFolderId") || DRIVE_FOLDER_ID;
+  const WEBCAM_FOLDER_ID = params.get("webcamFolderId") || DRIVE_FOLDER_ID;
   const SESSION_ID = generateSessionId();
   const FULL_FILENAME = `${PID}_${VID}_${SESSION_ID}`;
 
@@ -388,6 +390,17 @@
     });
   }
 
+  async function postJsonPayload(payload) {
+    await fetch(SCRIPT_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify(payload)
+    });
+  }
+
   async function uploadWebcamToAppsScript(blob, extension) {
     const base64Data = await blobToBase64(blob);
 
@@ -399,18 +412,26 @@
       videoId: VID,
       sessionId: SESSION_ID,
       youtubeId: YT_ID,
-      driveFolderId: DRIVE_FOLDER_ID,
+      driveFolderId: WEBCAM_FOLDER_ID,
       dataBase64: base64Data
     };
 
-    await fetch(SCRIPT_URL, {
-      method: "POST",
-      mode: "no-cors",
-      headers: {
-        "Content-Type": "text/plain;charset=utf-8"
-      },
-      body: JSON.stringify(payload)
-    });
+    await postJsonPayload(payload);
+  }
+
+  async function uploadCsvToAppsScript(csvContent) {
+    const payload = {
+      kind: "csv_data",
+      fileName: `${FULL_FILENAME}.csv`,
+      participantId: PID,
+      videoId: VID,
+      sessionId: SESSION_ID,
+      youtubeId: YT_ID,
+      driveFolderId: CSV_FOLDER_ID,
+      csvText: csvContent
+    };
+
+    await postJsonPayload(payload);
   }
 
   async function saveWebcamRecording() {
@@ -420,7 +441,7 @@
     const blob = new Blob(webcamChunks, { type: webcamMimeType || "video/webm" });
     downloadBlob(blob, `${FULL_FILENAME}_webcam.${extension}`);
 
-    if (!DRIVE_FOLDER_ID || webcamUploadAttempted) return;
+    if (!WEBCAM_FOLDER_ID || webcamUploadAttempted) return;
 
     webcamUploadAttempted = true;
 
@@ -441,11 +462,9 @@
     const blob = new Blob([csvContent], { type: "text/csv" });
     downloadBlob(blob, `${FULL_FILENAME}.csv`);
 
-    fetch(SCRIPT_URL, {
-      method: "POST",
-      mode: "no-cors",
-      body: csvContent
-    }).then(() => {
+    if (!CSV_FOLDER_ID) return;
+
+    uploadCsvToAppsScript(csvContent).then(() => {
       console.log("CSV upload sent for " + FULL_FILENAME);
     }).catch((err) => {
       console.error("CSV upload failed", err);
