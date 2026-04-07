@@ -273,8 +273,6 @@
 <script type="module">
   import { FaceDetector, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
 
-  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbytdM7UB1IrDmA4qK3qdQWMR5ZXgq3xBtZyfPH4c-bEK98oq-QjbvBCUKlHnYO4HgWINw/exec";
-
   function generateSessionId() {
     const now = new Date();
     const YYYY = now.getFullYear();
@@ -291,9 +289,6 @@
   const PID = params.get("pid") || "P001";
   const VID = params.get("vid") || "V01";
   const YT_ID = params.get("yt") || "905QNpTukIU";
-  const DRIVE_FOLDER_ID = params.get("driveFolderId") || "";
-  const CSV_FOLDER_ID = params.get("csvFolderId") || DRIVE_FOLDER_ID;
-  const WEBCAM_FOLDER_ID = params.get("webcamFolderId") || DRIVE_FOLDER_ID;
   const SESSION_ID = generateSessionId();
   const FULL_FILENAME = `${PID}_${VID}_${SESSION_ID}`;
 
@@ -340,7 +335,6 @@
   let webcamRecorder = null;
   let webcamChunks = [];
   let webcamMimeType = "";
-  let webcamUploadAttempted = false;
   let csvSaved = false;
 
   const points = [[15,15],[85,15],[50,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
@@ -378,80 +372,13 @@
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   }
 
-  function blobToBase64(blob) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = String(reader.result || "");
-        resolve(result.split(",")[1] || "");
-      };
-      reader.onerror = () => reject(reader.error || new Error("Failed to read blob."));
-      reader.readAsDataURL(blob);
-    });
-  }
-
-  async function postJsonPayload(payload) {
-    await fetch(SCRIPT_URL, {
-      method: "POST",
-      mode: "no-cors",
-      headers: {
-        "Content-Type": "text/plain;charset=utf-8"
-      },
-      body: JSON.stringify(payload)
-    });
-  }
-
-  async function uploadWebcamToAppsScript(blob, extension) {
-    const base64Data = await blobToBase64(blob);
-
-    const payload = {
-      kind: "webcam_video",
-      fileName: `${FULL_FILENAME}_webcam.${extension}`,
-      mimeType: blob.type || "video/webm",
-      participantId: PID,
-      videoId: VID,
-      sessionId: SESSION_ID,
-      youtubeId: YT_ID,
-      driveFolderId: WEBCAM_FOLDER_ID,
-      dataBase64: base64Data
-    };
-
-    await postJsonPayload(payload);
-  }
-
-  async function uploadCsvToAppsScript(csvContent) {
-    const payload = {
-      kind: "csv_data",
-      fileName: `${FULL_FILENAME}.csv`,
-      participantId: PID,
-      videoId: VID,
-      sessionId: SESSION_ID,
-      youtubeId: YT_ID,
-      driveFolderId: CSV_FOLDER_ID,
-      csvText: csvContent
-    };
-
-    await postJsonPayload(payload);
-  }
-
   async function saveWebcamRecording() {
     if (!webcamChunks.length) return;
 
     const extension = webcamMimeType.includes("mp4") ? "mp4" : "webm";
     const blob = new Blob(webcamChunks, { type: webcamMimeType || "video/webm" });
     downloadBlob(blob, `${FULL_FILENAME}_webcam.${extension}`);
-
-    if (!WEBCAM_FOLDER_ID || webcamUploadAttempted) return;
-
-    webcamUploadAttempted = true;
-
-    try {
-      await uploadWebcamToAppsScript(blob, extension);
-      alert("Webcam recording saved locally and upload was sent to Google Drive.");
-    } catch (err) {
-      console.error("Webcam upload failed", err);
-      alert("Webcam recording was saved locally, but Drive upload failed: " + err.message);
-    }
+    alert("Webcam recording saved locally.");
   }
 
   function saveCsvResults() {
@@ -461,14 +388,6 @@
     const csvContent = csvData.map(e => e.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: "text/csv" });
     downloadBlob(blob, `${FULL_FILENAME}.csv`);
-
-    if (!CSV_FOLDER_ID) return;
-
-    uploadCsvToAppsScript(csvContent).then(() => {
-      console.log("CSV upload sent for " + FULL_FILENAME);
-    }).catch((err) => {
-      console.error("CSV upload failed", err);
-    });
   }
 
   function stopWebcamRecordingInternal() {
